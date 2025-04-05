@@ -6,9 +6,10 @@ use sui::balance::Balance;
 use sui::sui::SUI;
 use sui::coin::{Self, Coin};
 use sui::event;
+use sui::transfer;
 
 // Importing necessary modules from standard library
-use std::string::String;
+use std::string::{Self, String};
 
 // Error codes
 const ENotAuthorized: u64 = 1;
@@ -66,7 +67,7 @@ public struct EscrowCreated has copy, drop {
     total_amount: u64,
 }
 
-public struct MilestoneCreated has copy, drop {
+public struct MilestoneCompleted has copy, drop {
     escrow_id: address,
     milestone_index: u64,
     amount: u64,
@@ -131,3 +132,122 @@ public fun create_escrow(
     escrow_id
 }
 
+// Add a milestone to an escrow contract
+public fun add_milestone(
+    escrow: &mut EscrowContract,
+    description: String,
+    amount: u64,
+    deadline: u64,
+    ctx: &mut TxContext
+) {
+    // Only clients can add milestones
+    assert!(ctx.sender() == escrow.client, ENotAuthorized);
+    // The contract must still be active
+    assert!(escrow.status == STATUS_ACTIVE, EInvalidState);
+
+    let milestone = Milestone {
+        description,
+        amount,
+        status: MILESTONE_PENDING,
+        deadline,
+        submission_note: string::utf8(b""),
+        rejection_reason: string::utf8(b"")
+    };
+
+    vector::push_back(&mut escrow.milestones, milestone);
+}
+
+//Submit a milestone as completed by a freelancer
+public fun submit_milestone(
+    escrow: &mut EscrowContract,
+    milestone_index: u64,
+    submission_note: String,
+    ctx: &mut TxContext
+) {
+    // Only freelancers can submit milestones
+    assert!(ctx.sender() == escrow.freelancer, ENotAuthorized);
+    // The contract must still be active
+    assert!(escrow.status == STATUS_ACTIVE, EInvalidState);
+    // The Milestone index must be valid
+    assert!(milestone_index < vector::length(&escrow.milestones), EInvalidMilestone);
+
+    // Get the milestone
+    let milestone = vector::borrow_mut(&mut escrow.milestones, milestone_index);
+    // The milestone must be pending
+    assert!(milestone.status == MILESTONE_PENDING, EInvalidState);
+
+    // Update the milestone status and submission note
+    milestone.status = MILESTONE_SUBMITTED;
+    milestone.submission_note = submission_note;
+}
+
+// Approve a milestone and release payment (client)
+public fun approve_milestone(escrow: &mut EscrowContract, milestone_index: u64, ctx: &mut TxContext) {
+    // Only clients can approve milestones
+    assert!(ctx.sender() == escrow.client, ENotAuthorized);
+    // The contract must still be active
+    assert!(escrow.status == STATUS_ACTIVE, EInvalidState);
+    // The milestone index must be valid
+    assert!(milestone_index < vector::length(&escrow.milestones), EInvalidMilestone);
+
+    // Get the milestone
+    let milestone = vector::borrow_mut(& mut escrow.milestones, milestone_index);
+    assert!(milestone.status == MILESTONE_SUBMITTED, EInvalidState);
+
+    // Update the milestone status to approved
+    milestone.status = MILESTONE_APPROVED;
+
+    // Release payment
+    let payment_amount = milestone.amount;
+    let payment = coin::take(&mut escrow.remaining_balance, payment_amount, ctx);
+
+    // Transfer the payment to the freelancer
+    transfer::public_transfer(payment, escrow.freelancer);
+
+    // Emit event
+    event::emit(MilestoneCompleted {
+        escrow_id: object::id_address(escrow),
+        milestone_index,
+        amount: payment_amount,
+    });
+
+    // Check if all milestones are completed
+    let mut all_completed = true;
+    let mut i = 0;
+    
+    while (i < vector::length(&escrow.milestones)) {
+        let milestone = vector::borrow(&escrow.milestones, i);
+        if (milestone.status != MILESTONE_APPROVED) {
+            all_completed = false;
+            break
+        };
+        i = i + 1;
+    };
+
+    // If all milestones are completed, mark the contract as completed
+    if (all_completed) {
+        escrow.status = STATUS_COMPLETED;
+    };
+}
+
+// Reject a milestone submission (client)
+public fun reject_milestone(
+    escrow: &mut EscrowContract,
+    milestone_index: u64,
+    rejection_reason: String,
+    ctx: &mut TxContext
+) {
+    // Only clients can reject milestones
+    assert!(ctx.sender() == escrow.client, ENotAuthorized);
+    // Contract must still be active
+    assert!(escrow.status == STATUS_ACTIVE, EInvalidState);
+    // Milestone index must be valid
+    assert!(milestone_index < vector::length(&escrow.milestones), EInvalidMilestone);
+
+    // Get the milestone
+    let milestone = vector::borrow_mut(&mut escrow.milestones, milestone_index);
+    assert!(milestone.status == MILESTONE_SUBMITTED, EInvalidState);
+
+    milestone.status = MILESTONE_REJECTED;
+    milestone.rejection_reason = rejection_reason;    
+}
