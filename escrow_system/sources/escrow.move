@@ -6,7 +6,6 @@ use sui::balance::Balance;
 use sui::sui::SUI;
 use sui::coin::{Self, Coin};
 use sui::event;
-use sui::transfer;
 
 // Importing necessary modules from standard library
 use std::string::{Self, String};
@@ -250,4 +249,51 @@ public fun reject_milestone(
 
     milestone.status = MILESTONE_REJECTED;
     milestone.rejection_reason = rejection_reason;    
+}
+
+// Open a dispute (both parties)
+public fun open_dispute(escrow: &mut EscrowContract, reason: String, ctx: &mut TxContext) {
+    let sender = ctx.sender();
+    // Only clients or freelancers can open disputes
+    assert!(sender == escrow.client || sender == escrow.freelancer, ENotAuthorized);
+    // Contract must still be active
+    assert!(escrow.status == STATUS_ACTIVE, EInvalidState);
+
+    escrow.status = STATUS_DISPUTED;
+
+    // Emit event
+    event::emit(DisputeOpened {
+        escrow_id: object::id_address(escrow),
+        opened_by: ctx.sender(),
+        reason,
+    });
+}
+
+// ==== Helper Functions ====
+
+// Get escrow details
+public fun get_escrow_details(escrow: &EscrowContract): (address, address, u64, u64, u8) {
+    (
+        escrow.client,
+        escrow.freelancer,
+        escrow.total_amount,
+        escrow.remaining_balance.value(),
+        escrow.status,
+    )
+}
+
+// Get milestone details
+public fun get_milestone_details(escrow: &EscrowContract, milestone_index: u64): (String, u64, u8, u64) {
+    let milestone = escrow.milestones.borrow(milestone_index);
+    (
+        milestone.description,
+        milestone.amount,
+        milestone.status,
+        milestone.deadline,
+    )
+}
+
+// Get the number of milestones
+public fun get_milestones_count(escrow: &EscrowContract): u64 {
+    escrow.milestones.length()
 }
