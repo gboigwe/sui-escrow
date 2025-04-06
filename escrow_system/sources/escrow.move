@@ -21,7 +21,7 @@ const EInvalidMilestone: u64 = 5;
 const STATUS_ACTIVE: u8 = 0;
 const STATUS_COMPLETED: u8 = 1;
 const STATUS_DISPUTED: u8 = 2;
-const STATUS_CANCELED: u8 = 3;
+const STATUS_CANCELLED: u8 = 3;
 
 // Milestone status
 const MILESTONE_PENDING: u8 = 0;
