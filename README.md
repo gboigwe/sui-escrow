@@ -45,7 +45,7 @@ SuiEscrow is a decentralized escrow and milestone-based payment system built on 
 
 2. Build and publish the Move modules:
    ```
-   cd move
+   cd escrow_system
    sui move build
    sui client publish --gas-budget 100000000
    ```

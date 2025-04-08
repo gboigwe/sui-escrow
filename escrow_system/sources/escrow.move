@@ -2,10 +2,11 @@
 module escrow_system::escrow;
 
 // Imporing necessary modules from Sui
-use sui::balance::Balance;
+use sui::balance::{Self, Balance};
 use sui::sui::SUI;
 use sui::coin::{Self, Coin};
 use sui::event;
+use sui::clock::{Self, Clock};
 
 // Importing necessary modules from standard library
 use std::string::{Self, String};
@@ -14,20 +15,28 @@ use std::string::{Self, String};
 const ENotAuthorized: u64 = 1;
 const EInvalidState: u64 = 2;
 const EInsufficientFunds: u64 = 3;
-const EMilestonesRequired: u64 = 4;
-const EInvalidMilestone: u64 = 5;
+const EInvalidMilestone: u64 = 4;
+const EInvalidAmount: u64 = 5;
+const EDeadlineExceeded: u64 = 6;
+// const EMilestoneAmountMismatch: u64 = 7;
+// const EContractExpired: u64 = 8;
+// const ECoolDownPeriod: u64 = 9;
+const EInvalidTimeParameters: u64 = 10;
 
 // Status Enum values
 const STATUS_ACTIVE: u8 = 0;
 const STATUS_COMPLETED: u8 = 1;
 const STATUS_DISPUTED: u8 = 2;
 const STATUS_CANCELLED: u8 = 3;
+// const STATUS_EXPIRED: u8 = 4;
 
 // Milestone status
 const MILESTONE_PENDING: u8 = 0;
 const MILESTONE_SUBMITTED: u8 = 1;
 const MILESTONE_APPROVED: u8 = 2;
 const MILESTONE_REJECTED: u8 = 3;
+// const MILESTONE_AUTOAPPROVED: u8 = 4;
+// const MILESTONE_DISPUTED: u8 = 5;
 
 // Main escrow contract object/struct
 public struct EscrowContract has key {
@@ -70,6 +79,23 @@ public struct MilestoneCompleted has copy, drop {
     escrow_id: address,
     milestone_index: u64,
     amount: u64,
+}
+
+public struct MilestoneRejected has copy, drop {
+    escrow_id: address,
+    milestone_index: u64,
+    reason: String,
+}
+
+public struct ContractCompleted has copy, drop {
+    escrow_id: address,
+    total_paid: u64,
+}
+
+public struct ContractCancelled has copy, drop {
+    escrow_id: address,
+    cancelled_by: address,
+    refund_amount: u64,
 }
 
 public struct DisputeOpened has copy, drop {
@@ -137,12 +163,22 @@ public fun add_milestone(
     description: String,
     amount: u64,
     deadline: u64,
+    clock: &Clock,
     ctx: &mut TxContext
 ) {
     // Only clients can add milestones
     assert!(ctx.sender() == escrow.client, ENotAuthorized);
     // The contract must still be active
     assert!(escrow.status == STATUS_ACTIVE, EInvalidState);
+
+    // Validate Deadline
+    let current_time = clock::timestamp_ms(clock);
+    assert!(deadline > current_time, EDeadlineExceeded);
+    assert!(deadline < escrow.end_date, EInvalidTimeParameters);
+
+    // validate amount
+    assert!(amount > 0, EInvalidAmount);
+    assert!(amount <= escrow.remaining_balance.value(), EInsufficientFunds);
 
     let milestone = Milestone {
         description,
@@ -211,22 +247,7 @@ public fun approve_milestone(escrow: &mut EscrowContract, milestone_index: u64, 
     });
 
     // Check if all milestones are completed
-    let mut all_completed = true;
-    let mut i = 0;
-    
-    while (i < vector::length(&escrow.milestones)) {
-        let milestone = vector::borrow(&escrow.milestones, i);
-        if (milestone.status != MILESTONE_APPROVED) {
-            all_completed = false;
-            break
-        };
-        i = i + 1;
-    };
-
-    // If all milestones are completed, mark the contract as completed
-    if (all_completed) {
-        escrow.status = STATUS_COMPLETED;
-    };
+    check_contract_completion(escrow, ctx);
 }
 
 // Reject a milestone submission (client)
@@ -248,7 +269,14 @@ public fun reject_milestone(
     assert!(milestone.status == MILESTONE_SUBMITTED, EInvalidState);
 
     milestone.status = MILESTONE_REJECTED;
-    milestone.rejection_reason = rejection_reason;    
+    milestone.rejection_reason = rejection_reason;
+
+    // Emit event
+    event::emit(MilestoneRejected {
+        escrow_id: object::uid_to_address(&escrow.id),
+        milestone_index,
+        reason: milestone.rejection_reason,
+    });
 }
 
 // Open a dispute (both parties)
@@ -264,12 +292,117 @@ public fun open_dispute(escrow: &mut EscrowContract, reason: String, ctx: &mut T
     // Emit event
     event::emit(DisputeOpened {
         escrow_id: object::id_address(escrow),
-        opened_by: ctx.sender(),
+        opened_by: sender,
         reason,
     });
 }
 
+// Cancel contract (only if both agree or if no milestonees added yet)
+public fun cancel_contract(
+    escrow: &mut EscrowContract,
+    client_agreed: bool,
+    freelancer_agreed: bool,
+    ctx: &mut TxContext
+) {
+    let sender = ctx.sender();
+    // Only clients or freelancers can cancel contracts
+    assert!(sender == escrow.client || sender == escrow.freelancer, ENotAuthorized);
+    // Contract must still be active
+    assert!(escrow.status == STATUS_ACTIVE, EInvalidState);
+
+    // Check cancellation conditions
+    // 1. Both parties agree, OR
+    // 2. No milestones added and client is cancelling, OR
+    // 3. No milestones with submissions and client is cancelling
+    let can_cancel = (client_agreed && freelancer_agreed) ||
+        (vector::length(&escrow.milestones) == 0 && sender == escrow.client) ||
+        (!has_submitted_milestones(escrow) && sender == escrow.client);
+
+    assert!(can_cancel, ENotAuthorized);
+
+    // Process refund to client
+    let refund_amount = balance::value(&escrow.remaining_balance);
+    let refund = coin::from_balance(balance::split(&mut escrow.remaining_balance, refund_amount), ctx);
+    transfer::public_transfer(refund, escrow.client);
+    
+    // Update contract status
+    escrow.status = STATUS_CANCELLED;
+    
+    // Emit event
+    event::emit(ContractCancelled {
+        escrow_id: object::uid_to_address(&escrow.id),
+        cancelled_by: sender,
+        refund_amount,
+    });
+}
+
 // ==== Helper Functions ====
+
+// Check if contract can be completed (all milestones approved)
+public fun check_contract_completion(escrow: &mut EscrowContract, ctx: &mut TxContext) {
+    // check if all milestones are completed
+    let mut all_completed = true;
+    let mut i = 0;
+
+    while (i < escrow.milestones.length()) {
+        let milestone = escrow.milestones.borrow(i);
+        if (milestone.status != MILESTONE_APPROVED) {
+            all_completed = false;
+            break
+        };
+        i = i + 1;
+    };
+
+    // If all milestones are completed, mark the contract as completed
+    if (all_completed) {
+        escrow.status = STATUS_COMPLETED;
+
+        // Handle any remaining balance (refund client)
+        let remaining = escrow.remaining_balance.value();
+        if (remaining > 0) {
+            let refund = coin::from_balance(balance::split(&mut escrow.remaining_balance, remaining), ctx);
+            transfer::public_transfer(refund, escrow.client);
+        };
+        
+        // Emit conpletion event
+        event::emit(ContractCompleted {
+            escrow_id: object::uid_to_address(&escrow.id),
+            total_paid: escrow.total_amount - remaining,
+        });
+    }
+}
+
+// Get the total milestone amount in an escrow
+public fun get_total_milestone_amount(escrow: &EscrowContract): u64 {
+    let mut total = 0;
+    let mut i = 0;
+
+    while (i < vector::length(&escrow.milestones)) {
+        let milestone = vector::borrow(&escrow.milestones, i);
+        total = total + milestone.amount;
+        i = i + 1;
+    };
+
+    total
+}
+
+// Check if the contract has any submitted milestones
+public fun has_submitted_milestones(escrow: &EscrowContract): bool {
+    let mut i = 0;
+    
+    while (i < vector::length(&escrow.milestones)) {
+        let milestone = vector::borrow(&escrow.milestones, i);
+        if (milestone.status == MILESTONE_SUBMITTED || 
+            milestone.status == MILESTONE_APPROVED) {
+            return true
+        };
+        i = i + 1;
+    };
+    
+    false
+}
+
+// ==== View Functions ====
 
 // Get escrow details
 public fun get_escrow_details(escrow: &EscrowContract): (address, address, u64, u64, u8) {
