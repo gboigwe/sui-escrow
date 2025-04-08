@@ -7,6 +7,10 @@ import {
   useSignAndExecuteTransaction, 
   useSuiClient 
 } from '@mysten/dapp-kit';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+// Create a client for React Query
+const queryClient = new QueryClient();
 
 // Choose which network to use (testnet, mainnet, or devnet)
 const activeNetwork = 'testnet';
@@ -73,17 +77,19 @@ const WalletContentProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 // This is the wrapper that provides all the dapp-kit providers
 export const WalletKitWrapper: React.FC<{ children: ReactNode }> = ({ children }) => {
   return (
-    <SuiClientProvider
-      defaultNetwork={activeNetwork}
-      networks={{
-        testnet: { url: getFullnodeUrl('testnet') },
-        mainnet: { url: getFullnodeUrl('mainnet') },
-        devnet: { url: getFullnodeUrl('devnet') },
-      }}
-    >
-      <DappKitWalletProvider>
-        <WalletContentProvider>{children}</WalletContentProvider>
-      </DappKitWalletProvider>
-    </SuiClientProvider>
+    <QueryClientProvider client={queryClient}>
+      <SuiClientProvider
+        defaultNetwork={activeNetwork}
+        networks={{
+          testnet: { url: getFullnodeUrl('testnet') },
+          mainnet: { url: getFullnodeUrl('mainnet') },
+          devnet: { url: getFullnodeUrl('devnet') },
+        }}
+      >
+        <DappKitWalletProvider>
+          <WalletContentProvider>{children}</WalletContentProvider>
+        </DappKitWalletProvider>
+      </SuiClientProvider>
+    </QueryClientProvider>
   );
 };
