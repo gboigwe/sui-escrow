@@ -4,7 +4,6 @@ import {
   SuiClientProvider, 
   WalletProvider as DappKitWalletProvider,
   useCurrentAccount, 
-  useSignAndExecuteTransaction, 
   useSuiClient 
 } from '@mysten/dapp-kit';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -37,7 +36,6 @@ export const useWallet = () => {
 const WalletContentProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const currentAccount = useCurrentAccount();
   const suiClient = useSuiClient();
-  const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction();
   
   const [address, setAddress] = useState<string | null>(null);
 
@@ -49,14 +47,19 @@ const WalletContentProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
   }, [currentAccount]);
 
-  // These are placeholder functions - you would need to implement them with @mysten/dapp-kit
-  // The actual connect/disconnect will be handled by the ConnectButton component
-  const connect = async () => {
-    console.log("Connect requested - use ConnectButton component instead");
+  // Enhanced connect function that triggers wallet connection
+  const connect = () => {
+    // Find the connect wallet button and click it
+    const connectButton = document.querySelector('[data-testid="connect-button"]') as HTMLButtonElement;
+    if (connectButton) {
+      connectButton.click();
+    }
   };
 
+  // Disconnect function
   const disconnect = () => {
-    console.log("Disconnect requested - use ConnectButton component instead");
+    // This is handled by the wallet UI directly
+    console.log("Disconnect requested - use wallet UI to disconnect");
   };
 
   return (

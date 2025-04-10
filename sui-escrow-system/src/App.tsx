@@ -4,6 +4,7 @@ import Layout from './components/Layout/Layout';
 import HomePage from './components/Home/HomePage';
 import ClientDashboard from './components/Dashboard/ClientDashboard';
 import FreelancerDashboard from './components/Dashboard/FreelancerDashboard';
+import ContractCreationForm from './components/EscrowContract/ContractCreationForm'
 import './App.css';
 
 function App() {
@@ -16,6 +17,7 @@ function App() {
               <Route path="/" element={<HomePage />} />
               <Route path="/client-dashboard" element={<ClientDashboard />} />
               <Route path="/freelancer-dashboard" element={<FreelancerDashboard />} />
+              <Route path="/create-contract" element={<ContractCreationForm />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Layout>
