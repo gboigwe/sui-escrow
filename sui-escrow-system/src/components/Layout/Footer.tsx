@@ -100,7 +100,7 @@ const Footer: React.FC = () => {
                 </svg>
               </a>
               <a 
-                href="https://github.com" 
+                href="https://github.com/gboigwe/sui-escrow" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="text-gray-500 hover:text-indigo-600"
