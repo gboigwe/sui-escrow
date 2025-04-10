@@ -2,9 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useWallet } from '../../context/WalletContext';
 import { motion, useScroll, useTransform, useInView } from 'framer-motion';
+import CustomConnectButton from '../common/CustomConnectButton';
 
 const HomePage: React.FC = () => {
-  const { isConnected, connect } = useWallet();
+  const { isConnected } = useWallet();
   
   // Intersection observers for animations
   const heroRef = useRef(null);
@@ -97,27 +98,24 @@ const HomePage: React.FC = () => {
               </p>
               
               <div className="flex flex-wrap gap-4 mb-12">
-                {isConnected ? (
-                  <Link 
-                    to="/create-contract" 
-                    className="inline-flex items-center justify-center px-8 py-4 rounded-full font-medium text-white bg-gradient-to-r from-indigo-600 to-purple-600 shadow-xl shadow-indigo-200/40 hover:shadow-indigo-200/60 transition-all duration-300 hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                      <path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM14 11a1 1 0 011 1v1h1a1 1 0 110 2h-1v1a1 1 0 11-2 0v-1h-1a1 1 0 110-2h1v-1a1 1 0 011-1z" />
-                    </svg>
-                    Create Contract
-                  </Link>
-                ) : (
-                  <button 
-                    onClick={connect}
-                    className="inline-flex items-center justify-center px-8 py-4 rounded-full font-medium text-white bg-gradient-to-r from-indigo-600 to-purple-600 shadow-xl shadow-indigo-200/40 hover:shadow-indigo-200/60 transition-all duration-300 hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M3 5a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2h-2.22l.123.489.804.804A1 1 0 0113 18H7a1 1 0 01-.707-1.707l.804-.804L7.22 15H5a2 2 0 01-2-2V5zm5.771 7H5V5h10v7H8.771z" clipRule="evenodd" />
-                    </svg>
-                    Connect Wallet
-                  </button>
-                )}
+              {!isConnected ? (
+                <CustomConnectButton 
+                  variant="primary" 
+                  size="lg" 
+                  className="inline-flex items-center justify-center px-8 py-4 rounded-full shadow-xl shadow-indigo-200/40 hover:shadow-indigo-200/60 transition-all duration-300 hover:-translate-y-0.5" 
+                  label="Connect Wallet"
+                />
+              ) : (
+                <Link 
+                  to="/create-contract" 
+                  className="inline-flex items-center justify-center px-8 py-4 rounded-full font-medium text-white bg-gradient-to-r from-indigo-600 to-purple-600 shadow-xl shadow-indigo-200/40 hover:shadow-indigo-200/60 transition-all duration-300 hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM14 11a1 1 0 011 1v1h1a1 1 0 110 2h-1v1a1 1 0 11-2 0v-1h-1a1 1 0 110-2h1v-1a1 1 0 011-1z" />
+                  </svg>
+                  Create Contract
+                </Link>
+              )}
                 
                 <Link 
                   to={isConnected ? "/client-dashboard" : "/freelancer-dashboard"} 
@@ -764,27 +762,24 @@ const HomePage: React.FC = () => {
           </p>
           
           <div className="flex flex-col sm:flex-row justify-center gap-6">
-            {isConnected ? (
-              <Link 
-                to="/create-contract" 
-                className="inline-flex items-center justify-center px-8 py-4 rounded-xl text-indigo-700 bg-white font-medium text-lg shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-300"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                  <path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM14 11a1 1 0 011 1v1h1a1 1 0 110 2h-1v1a1 1 0 11-2 0v-1h-1a1 1 0 110-2h1v-1a1 1 0 011-1z" />
-                </svg>
-                Create Your First Contract
-              </Link>
-            ) : (
-              <button 
-                onClick={connect}
-                className="inline-flex items-center justify-center px-8 py-4 rounded-xl text-indigo-700 bg-white font-medium text-lg shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-300"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M3 5a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2h-2.22l.123.489.804.804A1 1 0 0113 18H7a1 1 0 01-.707-1.707l.804-.804L7.22 15H5a2 2 0 01-2-2V5zm5.771 7H5V5h10v7H8.771z" clipRule="evenodd" />
-                </svg>
-                Connect Wallet
-              </button>
-            )}
+          {!isConnected ? (
+            <CustomConnectButton 
+              variant="primary" 
+              size="lg" 
+              className="inline-flex items-center justify-center px-8 py-4 rounded-full shadow-xl shadow-indigo-200/40 hover:shadow-indigo-200/60 transition-all duration-300 hover:-translate-y-0.5" 
+              label="Connect Wallet"
+            />
+          ) : (
+            <Link 
+              to="/create-contract" 
+              className="inline-flex items-center justify-center px-8 py-4 rounded-full font-medium text-white bg-gradient-to-r from-indigo-600 to-purple-600 shadow-xl shadow-indigo-200/40 hover:shadow-indigo-200/60 transition-all duration-300 hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM14 11a1 1 0 011 1v1h1a1 1 0 110 2h-1v1a1 1 0 11-2 0v-1h-1a1 1 0 110-2h1v-1a1 1 0 011-1z" />
+              </svg>
+              Create Contract
+            </Link>
+          )}
             
             <Link 
               to="/"

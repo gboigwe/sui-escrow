@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { useWallet } from '../../context/WalletContext';
-import { ConnectButton } from '@mysten/dapp-kit';
+// import { useWallet } from '../../context/WalletContext';
+// import { ConnectButton } from '@mysten/dapp-kit';
+import CustomConnectButton from '../common/CustomConnectButton';
 
 const Header: React.FC = () => {
   const location = useLocation();
-  const { address, isConnected } = useWallet();
+  // const { address, isConnected } = useWallet();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [animateItems, setAnimateItems] = useState(false);
@@ -35,10 +36,10 @@ const Header: React.FC = () => {
   ];
 
   // Format address for display
-  const formatAddress = (addr: string) => {
-    if (!addr) return '';
-    return `${addr.substring(0, 6)}...${addr.substring(addr.length - 4)}`;
-  };
+  // const formatAddress = (addr: string) => {
+  //   if (!addr) return '';
+  //   return `${addr.substring(0, 6)}...${addr.substring(addr.length - 4)}`;
+  // };
 
   return (
     <header 
@@ -98,15 +99,11 @@ const Header: React.FC = () => {
           
           {/* Wallet Connection */}
           <div className={`flex items-center transition-all duration-500 ease-out ${animateItems ? 'translate-x-0 opacity-100' : 'translate-x-8 opacity-0'}`}>
-            {isConnected && (
-              <div className="hidden md:flex items-center mr-3 py-1 pl-3 pr-2 bg-indigo-50 rounded-full transition-all duration-200 hover:bg-indigo-100">
-                <div className="w-2 h-2 rounded-full bg-green-400 mr-2 animate-pulse"></div>
-                <span className="text-xs font-medium text-gray-700">
-                  {formatAddress(address || '')}
-                </span>
-              </div>
-            )}
-            <ConnectButton className="relative z-10 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg text-sm font-medium shadow-md hover:shadow-lg transition-all duration-200 hover:translate-y-[-1px]" />
+            <CustomConnectButton 
+              variant="primary"
+              size="md"
+              className="relative z-10 shadow-md hover:shadow-lg transition-all duration-200 hover:translate-y-[-1px]"
+            />
             
             {/* Mobile menu button */}
             <div className="ml-4 md:hidden">

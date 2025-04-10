@@ -1,8 +1,9 @@
 import React from 'react';
 import { useWallet } from '../../context/WalletContext';
+import CustomConnectButton from '../common/CustomConnectButton';
 
 const FreelancerDashboard: React.FC = () => {
-  const { address, isConnected, connect } = useWallet();
+  const { address, isConnected } = useWallet();
 
   if (!isConnected) {
     return (
@@ -11,12 +12,12 @@ const FreelancerDashboard: React.FC = () => {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
         </svg>
         <p className="text-gray-600 mb-6 text-lg">Connect your wallet to access your freelancer dashboard</p>
-        <button
-          onClick={connect}
-          className="px-6 py-3 text-base font-medium text-white bg-purple-600 rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 shadow-md transition-colors"
-        >
-          Connect Wallet
-        </button>
+        <CustomConnectButton
+          variant="primary"
+          size="lg"
+          label="Connect Wallet"
+          className="shadow-md transition-colors"
+        />
       </div>
     );
   }
