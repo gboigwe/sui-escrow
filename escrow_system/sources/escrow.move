@@ -115,7 +115,18 @@ fun init(ctx: &mut TxContext) {
 
 // ==== Core Functions ====
 
-// Create a new escrow contract
+/// Create a new escrow contract
+/// 
+/// # Arguments
+/// * `client` - The client address
+/// * `freelancer` - The freelancer address
+/// * `description` - The description of the escrow contract
+/// * `end_date` - The end date of the escrow contract
+/// * `payment` - The payment coin
+/// * `ctx` - The transaction context
+/// 
+/// # Returns
+/// * The address of the escrow contract
 public fun create_escrow(
     client: address,
     freelancer: address,
@@ -157,7 +168,15 @@ public fun create_escrow(
     escrow_id
 }
 
-// Add a milestone to an escrow contract
+/// Add a milestone to an escrow contract
+/// 
+/// # Arguments
+/// * `escrow` - The escrow contract
+/// * `description` - The description of the milestone
+/// * `amount` - The amount of the milestone
+/// * `deadline` - The deadline of the milestone
+/// * `clock` - The clock object
+/// * `ctx` - The transaction context
 public fun add_milestone(
     escrow: &mut EscrowContract,
     description: String,
@@ -192,7 +211,13 @@ public fun add_milestone(
     vector::push_back(&mut escrow.milestones, milestone);
 }
 
-//Submit a milestone as completed by a freelancer
+/// Submit a milestone as completed by a freelancer
+/// 
+/// # Arguments
+/// * `escrow` - The escrow contract
+/// * `milestone_index` - The index of the milestone
+/// * `submission_note` - The note of the milestone
+/// * `ctx` - The transaction context
 public fun submit_milestone(
     escrow: &mut EscrowContract,
     milestone_index: u64,
@@ -216,7 +241,12 @@ public fun submit_milestone(
     milestone.submission_note = submission_note;
 }
 
-// Approve a milestone and release payment (client)
+/// Approve a milestone and release payment (client)
+/// 
+/// # Arguments
+/// * `escrow` - The escrow contract
+/// * `milestone_index` - The index of the milestone
+/// * `ctx` - The transaction context
 public fun approve_milestone(escrow: &mut EscrowContract, milestone_index: u64, ctx: &mut TxContext) {
     // Only clients can approve milestones
     assert!(ctx.sender() == escrow.client, ENotAuthorized);
@@ -250,7 +280,13 @@ public fun approve_milestone(escrow: &mut EscrowContract, milestone_index: u64, 
     check_contract_completion(escrow, ctx);
 }
 
-// Reject a milestone submission (client)
+/// Reject a milestone submission (client)
+/// 
+/// # Arguments
+/// * `escrow` - The escrow contract
+/// * `milestone_index` - The index of the milestone
+/// * `rejection_reason` - The reason for rejecting the milestone
+/// * `ctx` - The transaction context
 public fun reject_milestone(
     escrow: &mut EscrowContract,
     milestone_index: u64,
@@ -279,7 +315,12 @@ public fun reject_milestone(
     });
 }
 
-// Open a dispute (both parties)
+/// Open a dispute (both parties)
+/// 
+/// # Arguments
+/// * `escrow` - The escrow contract
+/// * `reason` - The reason for the dispute
+/// * `ctx` - The transaction context
 public fun open_dispute(escrow: &mut EscrowContract, reason: String, ctx: &mut TxContext) {
     let sender = ctx.sender();
     // Only clients or freelancers can open disputes
@@ -297,7 +338,13 @@ public fun open_dispute(escrow: &mut EscrowContract, reason: String, ctx: &mut T
     });
 }
 
-// Cancel contract (only if both agree or if no milestonees added yet)
+/// Cancel contract (only if both agree or if no milestonees added yet)
+/// 
+/// # Arguments
+/// * `escrow` - The escrow contract
+/// * `client_agreed` - Whether the client agrees to cancel
+/// * `freelancer_agreed` - Whether the freelancer agrees to cancel
+/// * `ctx` - The transaction context
 public fun cancel_contract(
     escrow: &mut EscrowContract,
     client_agreed: bool,
@@ -338,7 +385,11 @@ public fun cancel_contract(
 
 // ==== Helper Functions ====
 
-// Check if contract can be completed (all milestones approved)
+/// Check if contract can be completed (all milestones approved)
+/// 
+/// # Arguments
+/// * `escrow` - The escrow contract
+/// * `ctx` - The transaction context
 public fun check_contract_completion(escrow: &mut EscrowContract, ctx: &mut TxContext) {
     // check if all milestones are completed
     let mut all_completed = true;
@@ -372,7 +423,13 @@ public fun check_contract_completion(escrow: &mut EscrowContract, ctx: &mut TxCo
     }
 }
 
-// Get the total milestone amount in an escrow
+/// Get the total milestone amount in an escrow
+/// 
+/// # Arguments
+/// * `escrow` - The escrow contract
+/// 
+/// # Returns
+/// * The total milestone amount
 public fun get_total_milestone_amount(escrow: &EscrowContract): u64 {
     let mut total = 0;
     let mut i = 0;
@@ -386,7 +443,13 @@ public fun get_total_milestone_amount(escrow: &EscrowContract): u64 {
     total
 }
 
-// Check if the contract has any submitted milestones
+/// Check if the contract has any submitted milestones
+/// 
+/// # Arguments
+/// * `escrow` - The escrow contract
+/// 
+/// # Returns
+/// * Whether the contract has any submitted milestones
 public fun has_submitted_milestones(escrow: &EscrowContract): bool {
     let mut i = 0;
     
@@ -404,7 +467,13 @@ public fun has_submitted_milestones(escrow: &EscrowContract): bool {
 
 // ==== View Functions ====
 
-// Get escrow details
+/// Get escrow details
+/// 
+/// # Arguments
+/// * `escrow` - The escrow contract
+/// 
+/// # Returns
+/// * The escrow details
 public fun get_escrow_details(escrow: &EscrowContract): (address, address, u64, u64, u8) {
     (
         escrow.client,
@@ -415,7 +484,14 @@ public fun get_escrow_details(escrow: &EscrowContract): (address, address, u64, 
     )
 }
 
-// Get milestone details
+/// Get milestone details
+/// 
+/// # Arguments
+/// * `escrow` - The escrow contract
+/// * `milestone_index` - The index of the milestone
+/// 
+/// # Returns
+/// * The milestone details
 public fun get_milestone_details(escrow: &EscrowContract, milestone_index: u64): (String, u64, u8, u64) {
     let milestone = escrow.milestones.borrow(milestone_index);
     (
@@ -426,7 +502,13 @@ public fun get_milestone_details(escrow: &EscrowContract, milestone_index: u64):
     )
 }
 
-// Get the number of milestones
+/// Get the number of milestones
+/// 
+/// # Arguments
+/// * `escrow` - The escrow contract
+/// 
+/// # Returns
+/// * The number of milestones
 public fun get_milestones_count(escrow: &EscrowContract): u64 {
     escrow.milestones.length()
 }
