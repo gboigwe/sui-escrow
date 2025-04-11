@@ -98,7 +98,7 @@ const MOCK_CONTRACTS: EscrowContract[] = [
 ];
 
 const FreelancerDashboard: React.FC = () => {
-  const { address, isConnected, connect } = useWallet();
+  const { address, isConnected } = useWallet();
   const [contracts, setContracts] = useState<EscrowContract[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -125,9 +125,9 @@ const FreelancerDashboard: React.FC = () => {
   };
 
   // Format date from timestamp
-  const formatDate = (timestamp: number) => {
-    return new Date(timestamp).toLocaleDateString();
-  };
+  // const formatDate = (timestamp: number) => {
+  //   return new Date(timestamp).toLocaleDateString();
+  // };
 
   // Format SUI amount
   const formatAmount = (amount: number) => {

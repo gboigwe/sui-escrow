@@ -73,7 +73,7 @@ const MOCK_CONTRACTS: EscrowContract[] = [
 ];
 
 const ClientDashboard: React.FC = () => {
-  const { address, isConnected, connect } = useWallet();
+  const { address, isConnected } = useWallet();
   const [contracts, setContracts] = useState<EscrowContract[]>([]);
   const [loading, setLoading] = useState(true);
 
