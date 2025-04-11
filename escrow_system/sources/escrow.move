@@ -18,10 +18,8 @@ const EInsufficientFunds: u64 = 3;
 const EInvalidMilestone: u64 = 4;
 const EInvalidAmount: u64 = 5;
 const EDeadlineExceeded: u64 = 6;
-// const EMilestoneAmountMismatch: u64 = 7;
-// const EContractExpired: u64 = 8;
-// const ECoolDownPeriod: u64 = 9;
-const EInvalidTimeParameters: u64 = 10;
+const EMilestoneAmountMismatch: u64 = 7;
+const EInvalidTimeParameters: u64 = 8;
 
 // Status Enum values
 const STATUS_ACTIVE: u8 = 0;
@@ -104,7 +102,10 @@ public struct DisputeOpened has copy, drop {
     reason: String,
 }
 
-// ==== Initialization and Creation Functions ====
+/// Initialize the escrow module
+/// 
+/// # Arguments
+/// * `ctx` - Transaction context
 fun init(ctx: &mut TxContext) {
     // Create the EscrowAdmin object and transfer Admin Capability
     transfer::transfer(
@@ -123,6 +124,7 @@ fun init(ctx: &mut TxContext) {
 /// * `description` - The description of the escrow contract
 /// * `end_date` - The end date of the escrow contract
 /// * `payment` - The payment coin
+/// * `clock` - The clock object
 /// * `ctx` - The transaction context
 /// 
 /// # Returns
@@ -133,10 +135,18 @@ public fun create_escrow(
     description: String,
     end_date: u64,
     payment: Coin<SUI>,
+    clock: &Clock,
     ctx: &mut TxContext
 ): address {
     let total_amount = coin::value(&payment);
     let balance = coin::into_balance(payment);
+    
+    // Validate end_date is in the future
+    let current_time = clock::timestamp_ms(clock);
+    assert!(end_date > current_time, EInvalidTimeParameters);
+    
+    // Validate payment amount
+    assert!(total_amount > 0, EInvalidAmount);
 
     let escrow = EscrowContract {
         id: object::new(ctx),
@@ -146,7 +156,7 @@ public fun create_escrow(
         remaining_balance: balance,
         status: STATUS_ACTIVE,
         milestones: vector::empty<Milestone>(),
-        created_at: tx_context::epoch(ctx),
+        created_at: current_time,
         end_date,
         description,
     };
@@ -186,7 +196,7 @@ public fun add_milestone(
     ctx: &mut TxContext
 ) {
     // Only clients can add milestones
-    assert!(ctx.sender() == escrow.client, ENotAuthorized);
+    assert!(tx_context::sender(ctx) == escrow.client, ENotAuthorized);
     // The contract must still be active
     assert!(escrow.status == STATUS_ACTIVE, EInvalidState);
 
@@ -197,7 +207,11 @@ public fun add_milestone(
 
     // validate amount
     assert!(amount > 0, EInvalidAmount);
-    assert!(amount <= escrow.remaining_balance.value(), EInsufficientFunds);
+    assert!(amount <= balance::value(&escrow.remaining_balance), EInsufficientFunds);
+    
+    // Ensure that total milestone amounts don't exceed contract total
+    let total_milestone_amount = get_total_milestone_amount(escrow) + amount;
+    assert!(total_milestone_amount <= escrow.total_amount, EMilestoneAmountMismatch);
 
     let milestone = Milestone {
         description,
@@ -225,7 +239,7 @@ public fun submit_milestone(
     ctx: &mut TxContext
 ) {
     // Only freelancers can submit milestones
-    assert!(ctx.sender() == escrow.freelancer, ENotAuthorized);
+    assert!(tx_context::sender(ctx) == escrow.freelancer, ENotAuthorized);
     // The contract must still be active
     assert!(escrow.status == STATUS_ACTIVE, EInvalidState);
     // The Milestone index must be valid
@@ -249,7 +263,7 @@ public fun submit_milestone(
 /// * `ctx` - The transaction context
 public fun approve_milestone(escrow: &mut EscrowContract, milestone_index: u64, ctx: &mut TxContext) {
     // Only clients can approve milestones
-    assert!(ctx.sender() == escrow.client, ENotAuthorized);
+    assert!(tx_context::sender(ctx) == escrow.client, ENotAuthorized);
     // The contract must still be active
     assert!(escrow.status == STATUS_ACTIVE, EInvalidState);
     // The milestone index must be valid
@@ -294,7 +308,7 @@ public fun reject_milestone(
     ctx: &mut TxContext
 ) {
     // Only clients can reject milestones
-    assert!(ctx.sender() == escrow.client, ENotAuthorized);
+    assert!(tx_context::sender(ctx) == escrow.client, ENotAuthorized);
     // Contract must still be active
     assert!(escrow.status == STATUS_ACTIVE, EInvalidState);
     // Milestone index must be valid
@@ -322,7 +336,7 @@ public fun reject_milestone(
 /// * `reason` - The reason for the dispute
 /// * `ctx` - The transaction context
 public fun open_dispute(escrow: &mut EscrowContract, reason: String, ctx: &mut TxContext) {
-    let sender = ctx.sender();
+    let sender = tx_context::sender(ctx);
     // Only clients or freelancers can open disputes
     assert!(sender == escrow.client || sender == escrow.freelancer, ENotAuthorized);
     // Contract must still be active
@@ -351,7 +365,7 @@ public fun cancel_contract(
     freelancer_agreed: bool,
     ctx: &mut TxContext
 ) {
-    let sender = ctx.sender();
+    let sender = tx_context::sender(ctx);
     // Only clients or freelancers can cancel contracts
     assert!(sender == escrow.client || sender == escrow.freelancer, ENotAuthorized);
     // Contract must still be active
@@ -377,7 +391,7 @@ public fun cancel_contract(
     
     // Emit event
     event::emit(ContractCancelled {
-        escrow_id: object::uid_to_address(&escrow.id),
+        escrow_id: object::id_address(escrow),
         cancelled_by: sender,
         refund_amount,
     });
@@ -395,8 +409,8 @@ public fun check_contract_completion(escrow: &mut EscrowContract, ctx: &mut TxCo
     let mut all_completed = true;
     let mut i = 0;
 
-    while (i < escrow.milestones.length()) {
-        let milestone = escrow.milestones.borrow(i);
+    while (i < vector::length(&escrow.milestones)) {
+        let milestone = vector::borrow(&escrow.milestones, i);
         if (milestone.status != MILESTONE_APPROVED) {
             all_completed = false;
             break
@@ -409,15 +423,15 @@ public fun check_contract_completion(escrow: &mut EscrowContract, ctx: &mut TxCo
         escrow.status = STATUS_COMPLETED;
 
         // Handle any remaining balance (refund client)
-        let remaining = escrow.remaining_balance.value();
+        let remaining = balance::value(&escrow.remaining_balance);
         if (remaining > 0) {
             let refund = coin::from_balance(balance::split(&mut escrow.remaining_balance, remaining), ctx);
             transfer::public_transfer(refund, escrow.client);
         };
         
-        // Emit conpletion event
+        // Emit completion event
         event::emit(ContractCompleted {
-            escrow_id: object::uid_to_address(&escrow.id),
+            escrow_id: object::id_address(escrow),
             total_paid: escrow.total_amount - remaining,
         });
     }
@@ -479,7 +493,7 @@ public fun get_escrow_details(escrow: &EscrowContract): (address, address, u64, 
         escrow.client,
         escrow.freelancer,
         escrow.total_amount,
-        escrow.remaining_balance.value(),
+        balance::value(&escrow.remaining_balance),
         escrow.status,
     )
 }
@@ -493,7 +507,7 @@ public fun get_escrow_details(escrow: &EscrowContract): (address, address, u64, 
 /// # Returns
 /// * The milestone details
 public fun get_milestone_details(escrow: &EscrowContract, milestone_index: u64): (String, u64, u8, u64) {
-    let milestone = escrow.milestones.borrow(milestone_index);
+    let milestone = vector::borrow(&escrow.milestones, milestone_index);
     (
         milestone.description,
         milestone.amount,
@@ -510,5 +524,59 @@ public fun get_milestone_details(escrow: &EscrowContract, milestone_index: u64):
 /// # Returns
 /// * The number of milestones
 public fun get_milestones_count(escrow: &EscrowContract): u64 {
-    escrow.milestones.length()
+    vector::length(&escrow.milestones)
+}
+
+/// Resolve a disputed escrow based on dispute outcome
+/// 
+/// # Arguments
+/// * `escrow` - The escrow contract to resolve
+/// * `outcome` - The outcome of the dispute (1=client wins, 2=freelancer wins, 3=split)
+/// * `ctx` - Transaction context
+///
+/// # Errors
+/// * `EInvalidState` - If contract is not in disputed state
+public fun resolve_dispute(
+    escrow: &mut EscrowContract,
+    outcome: u8,
+    ctx: &mut TxContext
+) {
+    // Contract must be in disputed state
+    assert!(escrow.status == STATUS_DISPUTED, EInvalidState);
+    
+    let remaining = balance::value(&escrow.remaining_balance);
+    if (remaining > 0) {
+        // Outcome 1: Client wins - return all funds to client
+        if (outcome == 1) {
+            let refund = coin::from_balance(balance::split(&mut escrow.remaining_balance, remaining), ctx);
+            transfer::public_transfer(refund, escrow.client);
+        } 
+        // Outcome 2: Freelancer wins - send all funds to freelancer
+        else if (outcome == 2) {
+            let payment = coin::from_balance(balance::split(&mut escrow.remaining_balance, remaining), ctx);
+            transfer::public_transfer(payment, escrow.freelancer);
+        } 
+        // Outcome 3: Split - divide funds equally between client and freelancer
+        else if (outcome == 3) {
+            let half_amount = remaining / 2;
+            
+            // Send half to freelancer
+            let payment = coin::from_balance(balance::split(&mut escrow.remaining_balance, half_amount), ctx);
+            transfer::public_transfer(payment, escrow.freelancer);
+            
+            // Send remaining to client (might include dust if odd amount)
+            let remaining_after_split = balance::value(&escrow.remaining_balance);
+            let refund = coin::from_balance(balance::split(&mut escrow.remaining_balance, remaining_after_split), ctx);
+            transfer::public_transfer(refund, escrow.client);
+        }
+    };
+    
+    // Mark contract as completed
+    escrow.status = STATUS_COMPLETED;
+    
+    // Emit event
+    event::emit(ContractCompleted {
+        escrow_id: object::id_address(escrow),
+        total_paid: escrow.total_amount - remaining,
+    });
 }
