@@ -9,7 +9,7 @@ interface MilestoneFormProps {
 }
 
 const MilestoneForm: React.FC<MilestoneFormProps> = ({ 
-  escrowId, 
+  // escrowId, 
   totalAmount, 
   onMilestoneAdded,
   onCancel

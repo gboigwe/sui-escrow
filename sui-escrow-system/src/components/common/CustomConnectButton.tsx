@@ -1,6 +1,6 @@
 import React from 'react';
 import { ConnectButton } from '@mysten/dapp-kit';
-import { useWallet } from '../../context/WalletContext';
+// import { useWallet } from '../../context/WalletContext';
 
 interface CustomConnectButtonProps {
   variant?: 'default' | 'primary' | 'outline';
