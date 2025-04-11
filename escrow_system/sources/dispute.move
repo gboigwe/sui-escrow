@@ -1,4 +1,4 @@
-/// Module escrow_system
+/// Module for handling dispute resolution in the escrow system
 module escrow_system::dispute;
 
 // Importing necessary modules from sui
@@ -13,14 +13,12 @@ use escrow_system::escrow::{Self, EscrowContract};
 // Error codes
 const ENotAuthorized: u64 = 1;
 const EInvalidState: u64 = 2;
-// const EDisputeNotFound: u64 = 3;
-const EAlreadyVoted: u64 = 4;
-// const EDisputeActive: u64 = 5;
-const EVotingPeriodEnded: u64 = 6;
-const EVotingPeriodNotEnded: u64 = 7;
-const EEvidenceSubmissionEnded: u64 = 8;
-const EEvidenceTooLarge: u64 = 9;
-// const EDisputeAlreadyFinalized: u64 = 10;
+const EAlreadyVoted: u64 = 3;
+const EVotingPeriodEnded: u64 = 4;
+const EVotingPeriodNotEnded: u64 = 5;
+const EEvidenceSubmissionEnded: u64 = 6;
+const EEvidenceTooLarge: u64 = 7;
+const EInsufficientVotes: u64 = 8;
 
 // Resolution outcomes
 const OUTCOME_PENDING: u8 = 0;
@@ -39,6 +37,7 @@ const STATE_WITHDRAWN: u8 = 4;
 const MAX_EVIDENCE_LENGTH: u64 = 10000; // Maximum character length for evidence
 const EVIDENCE_PERIOD: u64 = 3 * 24 * 60 * 60 * 1000; // 3 days in milliseconds
 const VOTING_PERIOD: u64 = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
+const MIN_VOTERS_REQUIRED: u64 = 3; // Minimum number of votes required to finalize dispute
 
 // Dispute object/struct
 public struct Dispute has key, store {
@@ -117,7 +116,7 @@ public fun create_dispute(
     clock: &Clock,
     ctx: &mut TxContext,
 ): Dispute {
-    let sender = ctx.sender();
+    let sender = tx_context::sender(ctx);
     // Get both client and Freelancer addresses
     let (client, freelancer, _, _, _) = escrow::get_escrow_details(escrow);
 
@@ -142,7 +141,7 @@ public fun create_dispute(
         voters: vector::empty<address>(),
         created_at: current_time,
         evidence_end_time: current_time + EVIDENCE_PERIOD,
-        voting_end_time: current_time + VOTING_PERIOD,
+        voting_end_time: current_time + EVIDENCE_PERIOD + VOTING_PERIOD,
     };
 
     // Open dispute
@@ -173,7 +172,7 @@ public fun create_dispute(
 /// * `EEvidenceTooLarge` - If evidence exceeds max length
 /// * `EInvalidState` - If dispute is not in evidence collection state
 public fun submit_evidence(dispute: &mut Dispute, evidence: String, clock: &Clock, ctx: &mut TxContext) {
-    let sender = ctx.sender();
+    let sender = tx_context::sender(ctx);
 
     // Check dispute state
     assert!(dispute.state == STATE_EVIDENCE_COLLECTION, EInvalidState);
@@ -243,8 +242,9 @@ public fun update_evidence(
 /// * `EVotingPeriodEnded` - If voting period has ended
 /// * `EInvalidState` - If dispute is not in voting state
 /// * `EAlreadyVoted` - If sender has already voted
+/// * `ENotAuthorized` - If sender is the client or freelancer in the dispute
 public fun vote(dispute: &mut Dispute, vote_for_client: bool, clock: &Clock, ctx: &mut TxContext) {
-    let sender = ctx.sender();
+    let sender = tx_context::sender(ctx);
 
     // Check dispute state
     assert!(dispute.state == STATE_VOTING, EInvalidState);
@@ -252,6 +252,9 @@ public fun vote(dispute: &mut Dispute, vote_for_client: bool, clock: &Clock, ctx
     // Check if voting period is still active
     let current_time = clock::timestamp_ms(clock);
     assert!(current_time <= dispute.voting_end_time, EVotingPeriodEnded);
+    
+    // Ensure voter is not the client or freelancer
+    assert!(sender != dispute.client && sender != dispute.freelancer, ENotAuthorized);
 
     // Check if user already voted
     let mut i = 0;
@@ -282,14 +285,13 @@ public fun vote(dispute: &mut Dispute, vote_for_client: bool, clock: &Clock, ctx
 /// 
 /// # Arguments
 /// * `dispute` - The dispute to finalize
-/// * `escrow` - The associated escrow contract
 /// * `clock` - Clock object for timestamp
 /// * `ctx` - Transaction context
 ///
 /// # Errors
 /// * `EVotingPeriodNotEnded` - If voting period has not ended
 /// * `EInvalidState` - If dispute is not in voting state
-/// * `EDisputeAlreadyFinalized` - If dispute is already finalized
+/// * `EInsufficientVotes` - If there aren't enough votes to finalize
 public fun finalize_dispute(dispute: &mut Dispute, clock: &Clock, _ctx: &mut TxContext) {
     // Check dispute state
     assert!(dispute.state == STATE_VOTING, EInvalidState);
@@ -297,6 +299,10 @@ public fun finalize_dispute(dispute: &mut Dispute, clock: &Clock, _ctx: &mut TxC
     // Check if voting period has ended
     let current_time = clock::timestamp_ms(clock);
     assert!(current_time > dispute.voting_end_time, EVotingPeriodNotEnded);
+    
+    // Ensure we have minimum required votes
+    let total_votes = dispute.votes_for_client + dispute.votes_for_freelancer;
+    assert!(total_votes >= MIN_VOTERS_REQUIRED, EInsufficientVotes);
 
     // Determine outcome
     if (dispute.votes_for_client > dispute.votes_for_freelancer) {
@@ -356,9 +362,40 @@ public fun withdraw_dispute(
     });
 }
 
+/// Apply dispute resolution to escrow
+/// 
+/// # Arguments
+/// * `dispute` - The finalized dispute
+/// * `escrow` - The escrow contract to resolve
+/// * `ctx` - Transaction context
+///
+/// # Errors
+/// * `EInvalidState` - If dispute is not finalized
+public fun apply_resolution(
+    dispute: &Dispute,
+    escrow: &mut EscrowContract,
+    ctx: &mut TxContext
+) {
+    // Check dispute state - must be finalized
+    assert!(dispute.state == STATE_FINALIZED, EInvalidState);
+    
+    // Check that this dispute is for this escrow
+    assert!(dispute.escrow_id == object::id_address(escrow), EInvalidState);
+    
+    // Apply resolution based on outcome
+    escrow::resolve_dispute(escrow, dispute.outcome, ctx);
+}
+
 // ==== Helper Functions ====
 
-// Get dispute details
+/// Get dispute details
+/// 
+/// # Arguments
+/// * `dispute` - The dispute to get details for
+/// 
+/// # Returns
+/// * A tuple containing escrow_id, client, freelancer, outcome, state,
+///   votes_for_client, votes_for_freelancer, evidence_end_time, voting_end_time
 public fun get_dispute_details(dispute: &Dispute): (address, address, address, u8, u8, u64, u64, u64, u64) {
     (
         dispute.escrow_id,
@@ -373,7 +410,14 @@ public fun get_dispute_details(dispute: &Dispute): (address, address, address, u
     )
 }
 
-// Check if address has voted
+/// Check if address has voted in the dispute
+/// 
+/// # Arguments
+/// * `dispute` - The dispute to check
+/// * `voter` - The address to check
+/// 
+/// # Returns
+/// * true if the address has voted, false otherwise
 public fun has_voted(dispute: &Dispute, voter: address): bool {
     let mut i = 0;
 
@@ -387,7 +431,13 @@ public fun has_voted(dispute: &Dispute, voter: address): bool {
     false
 }
 
-// Get vote count
+/// Get vote count for the dispute
+/// 
+/// # Arguments
+/// * `dispute` - The dispute to check
+/// 
+/// # Returns
+/// * A tuple containing (votes_for_client, votes_for_freelancer)
 public fun get_vote_count(dispute: &Dispute): (u64, u64) {
     (dispute.votes_for_client, dispute.votes_for_freelancer)
 }
