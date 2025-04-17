@@ -20,7 +20,7 @@ interface MilestoneListProps {
 }
 
 const MilestoneList: React.FC<MilestoneListProps> = ({
-  escrowId,
+  // escrowId,
   milestones,
   clientAddress,
   freelancerAddress,
@@ -146,7 +146,8 @@ const MilestoneList: React.FC<MilestoneListProps> = ({
   };
 
   // Handle milestone approval
-  const handleApproveMilestone = async (index: number) => {
+  const handleApproveMilestone = async () => {
+    // const handleApproveMilestone = async (index: number) => {
     setIsSubmitting(true);
     
     try {
@@ -315,7 +316,7 @@ const MilestoneList: React.FC<MilestoneListProps> = ({
                         {isClient && milestone.status === 1 && (
                           <div className="flex flex-col space-y-2">
                             <button
-                              onClick={() => handleApproveMilestone(index)}
+                              onClick={() => handleApproveMilestone()}
                               disabled={isSubmitting}
                               className="inline-flex items-center px-2.5 py-1.5 text-xs font-medium rounded text-green-700 bg-green-100 hover:bg-green-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
@@ -444,7 +445,7 @@ const MilestoneList: React.FC<MilestoneListProps> = ({
                               {isClient && milestone.status === 1 && (
                                 <div className="flex flex-col space-y-2">
                                   <button
-                                    onClick={() => handleApproveMilestone(index)}
+                                    onClick={() => handleApproveMilestone()}
                                     disabled={isSubmitting}
                                     className="w-full py-2 text-xs font-medium text-green-700 bg-green-100 rounded hover:bg-green-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                   >
