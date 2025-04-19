@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useWallet } from '../../context/WalletContext';
 import { motion } from 'framer-motion';
 import CustomConnectButton from '../common/CustomConnectButton';
+import useEscrow from '../../hooks/useEscrow';
 
 interface FormData {
   freelancerAddress: string;
@@ -13,7 +13,7 @@ interface FormData {
 
 const ContractCreationForm: React.FC = () => {
   const navigate = useNavigate();
-  const { isConnected, address } = useWallet();
+  const { isConnected, address, createContract } = useEscrow();
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
   
   // Form state
@@ -33,6 +33,7 @@ const ContractCreationForm: React.FC = () => {
   const [currentStep, setCurrentStep] = useState(1);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [formProgress, setFormProgress] = useState(0);
+  const [transactionHash, setTransactionHash] = useState<string | null>(null);
   
   // Focus description field when first loaded
   useEffect(() => {
@@ -101,7 +102,7 @@ const ContractCreationForm: React.FC = () => {
       case 'freelancerAddress':
         if (!formData.freelancerAddress) {
           error = 'Freelancer address is required';
-        } else if (!/^0x[a-fA-F0-9]{64}$/.test(formData.freelancerAddress)) {
+        } else if (!/^0x[a-fA-F0-9]{40,64}$/.test(formData.freelancerAddress)) {
           error = 'Invalid Sui address format';
         } else if (formData.freelancerAddress === address) {
           error = 'You cannot create a contract with yourself';
@@ -206,15 +207,34 @@ const ContractCreationForm: React.FC = () => {
     setIsSubmitting(true);
     
     try {
-      // Simulate contract creation (to be replaced with actual contract creation)
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Call the createContract function from useEscrow hook
+      const result = await createContract(
+        formData.freelancerAddress,
+        formData.description,
+        formData.amount,
+        formData.endDate
+      );
       
-      // Show success message and then redirect
-      setShowSuccessMessage(true);
-      
-      setTimeout(() => {
-        navigate('/client-dashboard');
-      }, 3000);
+      if (result.success) {
+        // Set transaction hash for display in success message
+        setTransactionHash(result.txDigest || null);
+        
+        // Show success message and then redirect
+        setShowSuccessMessage(true);
+        
+        setTimeout(() => {
+          navigate('/client-dashboard');
+        }, 3000);
+      } else {
+        // Handle error
+        console.error('Error creating contract:', result.error);
+        setErrors(prev => ({
+          ...prev,
+          // Add a generic error if needed
+          description: 'Failed to create contract. Please try again.'
+        }));
+        setIsSubmitting(false);
+      }
     } catch (error) {
       console.error('Error creating contract:', error);
       setIsSubmitting(false);
@@ -259,6 +279,22 @@ const ContractCreationForm: React.FC = () => {
             Your escrow contract has been created and funds have been locked in the smart contract.
             You'll be redirected to your dashboard in a moment.
           </p>
+          {transactionHash && (
+            <div className="mb-6">
+              <p className="text-sm text-gray-600 mb-2">Transaction Hash:</p>
+              <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                <p className="font-mono text-xs text-gray-800 break-all">{transactionHash}</p>
+              </div>
+              <a 
+                href={`https://suiscan.xyz/testnet/tx/${transactionHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-indigo-600 hover:text-indigo-800 mt-2 inline-block"
+              >
+                View on Explorer
+              </a>
+            </div>
+          )}
           <div className="animate-pulse text-indigo-600 font-medium">
             Redirecting to dashboard...
           </div>
@@ -497,7 +533,7 @@ const ContractCreationForm: React.FC = () => {
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
-                      <span>Creating Contract...</span>
+                      Creating Contract on Blockchain...
                     </>
                   ) : (
                     <>
