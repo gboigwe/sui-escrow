@@ -1,15 +1,8 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useWallet } from '../../context/WalletContext';
-
-interface Milestone {
-  description: string;
-  amount: number;
-  status: number;
-  deadline: number;
-  submissionNote: string;
-  rejectionReason: string;
-}
+import useEscrow from '../../hooks/useEscrow';
+import { Milestone } from '../../utils/contracts';
+import { formatSuiAmount, calculateRemainingTime } from '../../utils/contracts';
 
 interface MilestoneListProps {
   escrowId: string;
@@ -20,13 +13,13 @@ interface MilestoneListProps {
 }
 
 const MilestoneList: React.FC<MilestoneListProps> = ({
-  // escrowId,
+  escrowId,
   milestones,
   clientAddress,
   freelancerAddress,
   refreshData,
 }) => {
-  const { address } = useWallet();
+  const { address, submitMilestone, approveMilestone, rejectMilestone } = useEscrow();
   
   // State for modal dialogs
   const [selectedMilestoneIndex, setSelectedMilestoneIndex] = useState<number | null>(null);
@@ -34,6 +27,7 @@ const MilestoneList: React.FC<MilestoneListProps> = ({
   const [rejectionReason, setRejectionReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeModal, setActiveModal] = useState<'submit' | 'reject' | null>(null);
+  const [transactionHash, setTransactionHash] = useState<string | null>(null);
   
   // Expanded milestone details for mobile view
   const [expandedMilestones, setExpandedMilestones] = useState<number[]>([]);
@@ -43,7 +37,7 @@ const MilestoneList: React.FC<MilestoneListProps> = ({
   const isFreelancer = address === freelancerAddress;
 
   // Status text mapping
-  const getStatusText = (status: number) => {
+  const getStatusText = (status: number): string => {
     switch (status) {
       case 0: return 'Pending';
       case 1: return 'Submitted';
@@ -54,7 +48,7 @@ const MilestoneList: React.FC<MilestoneListProps> = ({
   };
 
   // Status color mapping
-  const getStatusColor = (status: number) => {
+  const getStatusColor = (status: number): string => {
     switch (status) {
       case 0: return 'bg-gray-100 text-gray-800 border-gray-200';
       case 1: return 'bg-blue-100 text-blue-800 border-blue-200';
@@ -65,54 +59,14 @@ const MilestoneList: React.FC<MilestoneListProps> = ({
   };
 
   // Format date from timestamp
-  const formatDate = (timestamp: number) => {
+  const formatDate = (timestamp: number): string => {
     return new Date(timestamp).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric'
     });
   };
-
-  // Format SUI amount from MIST
-  const formatAmount = (amount: number) => {
-    return (amount / 1_000_000_000).toFixed(9) + ' SUI';
-  };
   
-  // Calculate remaining time
-  const calculateRemainingTime = (deadline: number) => {
-    const now = Date.now();
-    const timeRemaining = deadline - now;
-    
-    if (timeRemaining <= 0) {
-      return {
-        text: 'Overdue',
-        isOverdue: true
-      };
-    }
-    
-    const days = Math.floor(timeRemaining / (1000 * 60 * 60 * 24));
-    
-    if (days > 30) {
-      const months = Math.floor(days / 30);
-      return {
-        text: `${months} month${months > 1 ? 's' : ''} left`,
-        isOverdue: false
-      };
-    } else if (days > 0) {
-      return {
-        text: `${days} day${days > 1 ? 's' : ''} left`,
-        isOverdue: false
-      };
-    } else {
-      const hours = Math.floor(timeRemaining / (1000 * 60 * 60));
-      return {
-        text: `${hours} hour${hours > 1 ? 's' : ''} left`,
-        isOverdue: false,
-        isUrgent: true
-      };
-    }
-  };
-
   // Toggle milestone expansion for mobile view
   const toggleMilestoneExpansion = (index: number) => {
     setExpandedMilestones(prev => 
@@ -127,39 +81,63 @@ const MilestoneList: React.FC<MilestoneListProps> = ({
     if (selectedMilestoneIndex === null) return;
     
     setIsSubmitting(true);
+    setTransactionHash(null);
     
     try {
-      // Here we would call the smart contract
-      // For now, let's simulate a delay and success
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // Call the submit milestone function from useEscrow hook
+      const result = await submitMilestone(
+        escrowId,
+        selectedMilestoneIndex,
+        submissionNote
+      );
       
-      // Close modal and refresh data
-      setSubmissionNote('');
-      setSelectedMilestoneIndex(null);
-      setActiveModal(null);
-      refreshData();
+      if (result.success) {
+        // Store the transaction hash
+        setTransactionHash(result.txDigest || null);
+        
+        // Close modal after a delay to show transaction hash
+        setTimeout(() => {
+          setSubmissionNote('');
+          setSelectedMilestoneIndex(null);
+          setActiveModal(null);
+          refreshData();
+        }, 3000);
+      } else {
+        // Handle error
+        console.error('Error submitting milestone:', result.error);
+        setIsSubmitting(false);
+      }
     } catch (error) {
       console.error('Error submitting milestone:', error);
-    } finally {
       setIsSubmitting(false);
     }
   };
 
   // Handle milestone approval
-  const handleApproveMilestone = async () => {
-    // const handleApproveMilestone = async (index: number) => {
+  const handleApproveMilestone = async (index: number) => {
     setIsSubmitting(true);
+    setTransactionHash(null);
     
     try {
-      // Here we would call the smart contract
-      // For now, let's simulate a delay and success
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // Call the approve milestone function from useEscrow hook
+      const result = await approveMilestone(escrowId, index);
       
-      // Refresh data
-      refreshData();
+      if (result.success) {
+        // Store the transaction hash
+        setTransactionHash(result.txDigest || null);
+        
+        // Refresh data after approval
+        setTimeout(() => {
+          refreshData();
+          setIsSubmitting(false);
+        }, 2000);
+      } else {
+        // Handle error
+        console.error('Error approving milestone:', result.error);
+        setIsSubmitting(false);
+      }
     } catch (error) {
       console.error('Error approving milestone:', error);
-    } finally {
       setIsSubmitting(false);
     }
   };
@@ -169,20 +147,34 @@ const MilestoneList: React.FC<MilestoneListProps> = ({
     if (selectedMilestoneIndex === null) return;
     
     setIsSubmitting(true);
+    setTransactionHash(null);
     
     try {
-      // Here we would call the smart contract
-      // For now, let's simulate a delay and success
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // Call the reject milestone function from useEscrow hook
+      const result = await rejectMilestone(
+        escrowId,
+        selectedMilestoneIndex,
+        rejectionReason
+      );
       
-      // Close modal and refresh data
-      setRejectionReason('');
-      setSelectedMilestoneIndex(null);
-      setActiveModal(null);
-      refreshData();
+      if (result.success) {
+        // Store the transaction hash
+        setTransactionHash(result.txDigest || null);
+        
+        // Close modal after a delay to show transaction hash
+        setTimeout(() => {
+          setRejectionReason('');
+          setSelectedMilestoneIndex(null);
+          setActiveModal(null);
+          refreshData();
+        }, 3000);
+      } else {
+        // Handle error
+        console.error('Error rejecting milestone:', result.error);
+        setIsSubmitting(false);
+      }
     } catch (error) {
       console.error('Error rejecting milestone:', error);
-    } finally {
       setIsSubmitting(false);
     }
   };
@@ -191,6 +183,7 @@ const MilestoneList: React.FC<MilestoneListProps> = ({
   const openModal = (type: 'submit' | 'reject', index: number) => {
     setSelectedMilestoneIndex(index);
     setActiveModal(type);
+    setTransactionHash(null);
   };
 
   // Close modal
@@ -199,6 +192,7 @@ const MilestoneList: React.FC<MilestoneListProps> = ({
     setActiveModal(null);
     setSubmissionNote('');
     setRejectionReason('');
+    setTransactionHash(null);
   };
 
   return (
@@ -295,7 +289,7 @@ const MilestoneList: React.FC<MilestoneListProps> = ({
                     
                     <div className="flex items-center space-x-4">
                       <div className="text-right">
-                        <div className="text-sm font-medium text-gray-900">{formatAmount(milestone.amount)}</div>
+                        <div className="text-sm font-medium text-gray-900">{formatSuiAmount(milestone.amount)}</div>
                         <div className="mt-1">
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(milestone.status)}`}>
                             {getStatusText(milestone.status)}
@@ -316,7 +310,7 @@ const MilestoneList: React.FC<MilestoneListProps> = ({
                         {isClient && milestone.status === 1 && (
                           <div className="flex flex-col space-y-2">
                             <button
-                              onClick={() => handleApproveMilestone()}
+                              onClick={() => handleApproveMilestone(index)}
                               disabled={isSubmitting}
                               className="inline-flex items-center px-2.5 py-1.5 text-xs font-medium rounded text-green-700 bg-green-100 hover:bg-green-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
@@ -400,7 +394,7 @@ const MilestoneList: React.FC<MilestoneListProps> = ({
                             
                             <div className="flex justify-between text-xs">
                               <span className="text-gray-500">Amount:</span>
-                              <span className="text-gray-900 font-medium">{formatAmount(milestone.amount)}</span>
+                              <span className="text-gray-900 font-medium">{formatSuiAmount(milestone.amount)}</span>
                             </div>
                             
                             <div className="flex justify-between text-xs">
@@ -445,7 +439,7 @@ const MilestoneList: React.FC<MilestoneListProps> = ({
                               {isClient && milestone.status === 1 && (
                                 <div className="flex flex-col space-y-2">
                                   <button
-                                    onClick={() => handleApproveMilestone()}
+                                    onClick={() => handleApproveMilestone(index)}
                                     disabled={isSubmitting}
                                     className="w-full py-2 text-xs font-medium text-green-700 bg-green-100 rounded hover:bg-green-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                   >
@@ -501,41 +495,61 @@ const MilestoneList: React.FC<MilestoneListProps> = ({
                 />
               </div>
               
-              <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-100 mb-6">
-                <div className="flex items-start">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-indigo-600 mt-0.5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                  </svg>
-                  <div>
-                    <p className="text-sm text-indigo-700">
-                      Once submitted, the client will be able to review your work and either approve or reject it.
-                    </p>
+              {transactionHash ? (
+                <div className="mb-6">
+                  <p className="text-sm text-gray-600 mb-2">Transaction Hash:</p>
+                  <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                    <p className="font-mono text-xs text-gray-800 break-all">{transactionHash}</p>
+                  </div>
+                  <a 
+                    href={`https://suiscan.xyz/testnet/tx/${transactionHash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-indigo-600 hover:text-indigo-800 mt-2 inline-block"
+                  >
+                    View on Explorer
+                  </a>
+                </div>
+              ) : (
+                <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-100 mb-6">
+                  <div className="flex items-start">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-indigo-600 mt-0.5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                    <div>
+                      <p className="text-sm text-indigo-700">
+                        Once submitted, the client will be able to review your work and either approve or reject it.
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
               
               <div className="flex justify-end space-x-4">
                 <button
                   onClick={closeModal}
                   className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors"
+                  disabled={isSubmitting}
                 >
-                  Cancel
+                  {isSubmitting ? 'Please wait...' : 'Cancel'}
                 </button>
-                <button
-                  onClick={handleSubmitMilestone}
-                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors flex items-center"
-                  disabled={isSubmitting || !submissionNote.trim()}
-                >
-                  {isSubmitting ? (
-                    <>
-                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Submitting...
-                    </>
-                  ) : "Submit Work"}
-                </button>
+                {!transactionHash && (
+                  <button
+                    onClick={handleSubmitMilestone}
+                    className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors flex items-center"
+                    disabled={isSubmitting || !submissionNote.trim()}
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Submitting on Blockchain...
+                      </>
+                    ) : "Submit Work"}
+                  </button>
+                )}
               </div>
             </div>
           </motion.div>
@@ -570,41 +584,61 @@ const MilestoneList: React.FC<MilestoneListProps> = ({
                 />
               </div>
               
-              <div className="bg-red-50 p-4 rounded-lg border border-red-100 mb-6">
-                <div className="flex items-start">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-600 mt-0.5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                  </svg>
-                  <div>
-                    <p className="text-sm text-red-700">
-                      Provide clear feedback on what needs to be fixed. The freelancer will need to resubmit the work after making the requested changes.
-                    </p>
+              {transactionHash ? (
+                <div className="mb-6">
+                  <p className="text-sm text-gray-600 mb-2">Transaction Hash:</p>
+                  <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                    <p className="font-mono text-xs text-gray-800 break-all">{transactionHash}</p>
+                  </div>
+                  <a 
+                    href={`https://suiscan.xyz/testnet/tx/${transactionHash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-red-600 hover:text-red-800 mt-2 inline-block"
+                  >
+                    View on Explorer
+                  </a>
+                </div>
+              ) : (
+                <div className="bg-red-50 p-4 rounded-lg border border-red-100 mb-6">
+                  <div className="flex items-start">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-600 mt-0.5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    <div>
+                      <p className="text-sm text-red-700">
+                        Provide clear feedback on what needs to be fixed. The freelancer will need to resubmit the work after making the requested changes.
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
               
               <div className="flex justify-end space-x-4">
                 <button
                   onClick={closeModal}
                   className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors"
+                  disabled={isSubmitting}
                 >
-                  Cancel
+                  {isSubmitting ? 'Please wait...' : 'Cancel'}
                 </button>
-                <button
-                  onClick={handleRejectMilestone}
-                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors flex items-center"
-                  disabled={isSubmitting || !rejectionReason.trim()}
-                >
-                  {isSubmitting ? (
-                    <>
-                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Rejecting...
-                    </>
-                  ) : "Reject Submission"}
-                </button>
+                {!transactionHash && (
+                  <button
+                    onClick={handleRejectMilestone}
+                    className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors flex items-center"
+                    disabled={isSubmitting || !rejectionReason.trim()}
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Rejecting on Blockchain...
+                      </>
+                    ) : "Reject Submission"}
+                  </button>
+                )}
               </div>
             </div>
           </motion.div>
