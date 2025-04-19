@@ -99,9 +99,19 @@ SuiEscrow leverages Sui's unique object-centric model and ownership system:
 - **Events**: Contract interactions emit events for frontend reactivity
 - **Access Controls**: Role-based permissions enforce proper authorization
 
-## 📝 License
+## ⚠️ IMPORTANT NOTICE ⚠️
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is currently participating in the **Sui Overflow 2025 Hackathon**. 
+
+Until the conclusion of the hackathon:
+- This code is **NOT OPEN SOURCE**
+- **NO CONTRIBUTIONS** are being accepted
+- **NO FORKS** or derivative works are permitted
+- This code may not be used in any other hackathon or competitive submission
+
+Please see the [LICENSE.md](./LICENSE.md) file for detailed terms and restrictions.
+
+The project will be released under a standard open source license after the hackathon concludes.
 
 ## 🏆 Acknowledgements
 
