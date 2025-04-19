@@ -1,217 +1,111 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useWallet } from '../../context/WalletContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import MilestoneList from './MilestoneList';
 import MilestoneForm from './MilestoneForm';
-
-// Mock data interface (to be replaced with actual contract data)
-interface Milestone {
-  description: string;
-  amount: number;
-  status: number;
-  deadline: number;
-  submissionNote: string;
-  rejectionReason: string;
-}
-
-interface EscrowContract {
-  id: string;
-  client: string;
-  freelancer: string;
-  totalAmount: number;
-  remainingBalance: number;
-  status: number;
-  milestones: Milestone[];
-  createdAt: number;
-  endDate: number;
-  description: string;
-}
-
-// Mock data (to be replaced with data from smart contract)
-const MOCK_CONTRACTS: EscrowContract[] = [
-  {
-    id: "contract-1",
-    client: "0x1234567890abcdef1234567890abcdef12345678",
-    freelancer: "0xabcdef1234567890abcdef1234567890abcdef12",
-    totalAmount: 5000000000, // 5 SUI (in MIST)
-    remainingBalance: 3000000000,
-    status: 0, // Active
-    milestones: [
-      {
-        description: "Website Design",
-        amount: 2000000000,
-        status: 2, // Approved
-        deadline: Date.now() + 86400000 * 7, // 7 days from now
-        submissionNote: "Completed the design as requested. Figma file link: https://figma.com/file/...",
-        rejectionReason: "",
-      },
-      {
-        description: "Frontend Development",
-        amount: 3000000000,
-        status: 0, // Pending
-        deadline: Date.now() + 86400000 * 14, // 14 days from now
-        submissionNote: "",
-        rejectionReason: "",
-      },
-    ],
-    createdAt: Date.now() - 86400000 * 3, // 3 days ago
-    endDate: Date.now() + 86400000 * 30, // 30 days from now
-    description: "Portfolio website redesign with React and TailwindCSS",
-  },
-  {
-    id: "contract-2",
-    client: "0x1234567890abcdef1234567890abcdef12345678",
-    freelancer: "0xdef1234567890abcdef1234567890abcdef123456",
-    totalAmount: 3000000000, // 3 SUI
-    remainingBalance: 3000000000,
-    status: 0, // Active
-    milestones: [],
-    createdAt: Date.now() - 86400000 * 1, // 1 day ago
-    endDate: Date.now() + 86400000 * 20, // 20 days from now
-    description: "Mobile app UI design for e-commerce platform",
-  }
-];
+import useEscrow from '../../hooks/useEscrow';
+import { 
+  formatSuiAmount, 
+  calculateProgress, 
+  calculateRemainingTime,
+  formatStatusText,
+  CONTRACT_STATUS
+} from '../../utils/contracts';
 
 const ContractDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { address, isConnected, connect } = useWallet();
   const pageTopRef = useRef<HTMLDivElement>(null);
+  const { 
+    isConnected, 
+    address, 
+    loadContract, 
+    currentContract, 
+    loading, 
+    error, 
+    openDispute,
+    cancelContract,
+    refresh
+  } = useEscrow();
   
-  // State
-  const [contract, setContract] = useState<EscrowContract | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // UI state
   const [disputeReason, setDisputeReason] = useState("");
   const [isDisputeModalOpen, setIsDisputeModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [milestoneFormVisible, setMilestoneFormVisible] = useState(false);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
-
-  // Status text mapping
-  const getStatusText = (status: number) => {
-    switch (status) {
-      case 0: return 'Active';
-      case 1: return 'Completed';
-      case 2: return 'Disputed';
-      case 3: return 'Cancelled';
-      default: return 'Unknown';
-    }
-  };
-
-  // Status color mapping
-  const getStatusColor = (status: number) => {
-    switch (status) {
-      case 0: return 'bg-green-100 text-green-800 border-green-200';
-      case 1: return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 2: return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 3: return 'bg-red-100 text-red-800 border-red-200';
-      default: return 'bg-gray-100 text-gray-800 border-gray-200';
-    }
-  };
-
-  // Format date from timestamp
-  const formatDate = (timestamp: number) => {
-    return new Date(timestamp).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-  };
-
-  // Format SUI amount from MIST
-  const formatAmount = (amount: number) => {
-    return (amount / 1_000_000_000).toFixed(9) + ' SUI';
-  };
+  const [transactionHash, setTransactionHash] = useState<string | null>(null);
 
   // Check if current user is client or freelancer
-  const isClient = contract && address === contract.client;
-  const isFreelancer = contract && address === contract.freelancer;
-  const isParticipant = isClient || isFreelancer;
+  const isClient = currentContract && address === currentContract.client;
+  const isFreelancer = currentContract && address === currentContract.freelancer;
+  const isParticipant = Boolean(isClient) || Boolean(isFreelancer);
 
-  // Calculate progress percentage
-  const calculateProgress = (contract: EscrowContract) => {
-    if (contract.milestones.length === 0) return 0;
-    const completedMilestones = contract.milestones.filter(m => m.status === 2).length;
-    return Math.round((completedMilestones / contract.milestones.length) * 100);
-  };
-
-  // Calculate remaining time
-  const calculateRemainingTime = (deadline: number) => {
-    const now = Date.now();
-    const timeRemaining = deadline - now;
-    
-    if (timeRemaining <= 0) {
-      return 'Deadline passed';
-    }
-    
-    const days = Math.floor(timeRemaining / (1000 * 60 * 60 * 24));
-    
-    if (days > 30) {
-      const months = Math.floor(days / 30);
-      return `${months} month${months > 1 ? 's' : ''} remaining`;
-    } else if (days > 0) {
-      return `${days} day${days > 1 ? 's' : ''} remaining`;
-    } else {
-      const hours = Math.floor(timeRemaining / (1000 * 60 * 60));
-      return `${hours} hour${hours > 1 ? 's' : ''} remaining`;
-    }
-  };
-
-  // Fetch contract details
+  // Load contract data
   const fetchContractDetails = useCallback(async () => {
     if (!id) return;
     
-    setLoading(true);
-    setError(null);
-    
     try {
-      // This would be replaced with an actual smart contract call
-      // For now, using mock data
-      const foundContract = MOCK_CONTRACTS.find(c => c.id === id);
-      
-      if (foundContract) {
-        // Simulate network delay
-        await new Promise(resolve => setTimeout(resolve, 800));
-        setContract(foundContract);
-      } else {
-        setError('Contract not found. Please check the contract ID.');
-      }
+      await loadContract(id);
     } catch (err) {
       console.error('Failed to fetch contract details:', err);
-      setError('Failed to fetch contract details. Please try again.');
-    } finally {
-      setLoading(false);
     }
-  }, [id]);
+  }, [id, loadContract]);
 
   // Handle opening a dispute
   const handleOpenDispute = async () => {
-    if (!id || !contract) return;
+    if (!id || !currentContract) return;
+    
+    setIsSubmitting(true);
+    setTransactionHash(null);
+    
+    try {
+      const result = await openDispute(id, disputeReason);
+      
+      if (result.success) {
+        // Set transaction hash
+        setTransactionHash(result.txDigest || null);
+        
+        // Close modal and reset after successful transaction
+        setTimeout(() => {
+          setIsDisputeModalOpen(false);
+          setDisputeReason('');
+          refresh();
+        }, 3000);
+      } else {
+        console.error('Error opening dispute:', result.error);
+        setIsSubmitting(false);
+      }
+    } catch (err) {
+      console.error('Error opening dispute:', err);
+      setIsSubmitting(false);
+    }
+  };
+
+  // Handle cancelling a contract
+  const handleCancelContract = async () => {
+    if (!id || !currentContract) return;
     
     setIsSubmitting(true);
     
     try {
-      // This would be replaced with an actual smart contract call
-      // For now, simulating the action
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Determine who is cancelling
+      const clientAgreed = Boolean(isClient);
+      const freelancerAgreed = Boolean(isFreelancer);
       
-      // Update the local state to simulate the change
-      setContract(prev => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          status: 2, // Disputed
-        };
-      });
+      const result = await cancelContract(id, clientAgreed, freelancerAgreed);
       
-      setIsDisputeModalOpen(false);
-      setDisputeReason('');
+      if (result.success) {
+        // Refresh contract data
+        refresh();
+        
+        // Show success message
+        setIsSubmitting(false);
+      } else {
+        console.error('Error cancelling contract:', result.error);
+        setIsSubmitting(false);
+      }
     } catch (err) {
-      console.error('Error opening dispute:', err);
-      setError('Failed to open dispute. Please try again.');
-    } finally {
+      console.error('Error cancelling contract:', err);
       setIsSubmitting(false);
     }
   };
@@ -219,7 +113,7 @@ const ContractDetails: React.FC = () => {
   // Handle milestone added
   const handleMilestoneAdded = () => {
     setMilestoneFormVisible(false);
-    setRefreshTrigger(prev => prev + 1);
+    refresh();
   };
 
   // Fetch contract data on component mount
@@ -227,7 +121,7 @@ const ContractDetails: React.FC = () => {
     if (isConnected && id) {
       fetchContractDetails();
     }
-  }, [isConnected, id, fetchContractDetails, refreshTrigger]);
+  }, [isConnected, id, fetchContractDetails]);
 
   // Scroll to top when viewing a new contract
   useEffect(() => {
@@ -244,7 +138,7 @@ const ContractDetails: React.FC = () => {
         </svg>
         <p className="text-gray-600 mb-6 text-lg">Connect your wallet to view contract details</p>
         <button
-          onClick={connect}
+          onClick={() => {}} // No action needed here as ConnectButton will be rendered by dapp-kit
           className="px-6 py-3 text-base font-medium text-white bg-indigo-600 rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
         >
           Connect Wallet
@@ -297,7 +191,7 @@ const ContractDetails: React.FC = () => {
     );
   }
 
-  if (!contract) {
+  if (!currentContract) {
     return (
       <div className="text-center py-12">
         <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-6">
@@ -330,20 +224,37 @@ const ContractDetails: React.FC = () => {
             <div>
               <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
                 <span>Contract ID:</span>
-                <span className="font-mono">{contract.id}</span>
+                <span className="font-mono">{currentContract.id}</span>
               </div>
-              <h1 className="text-2xl font-bold text-gray-900">{contract.description}</h1>
+              <h1 className="text-2xl font-bold text-gray-900">{currentContract.description}</h1>
             </div>
             <div className="flex gap-3">
-              <span className={`px-3 py-1 rounded-full text-sm font-medium border ${getStatusColor(contract.status)}`}>
-                {getStatusText(contract.status)}
+              <span className={`px-3 py-1 rounded-full text-sm font-medium border ${
+                currentContract.status === CONTRACT_STATUS.ACTIVE 
+                  ? 'bg-green-100 text-green-800 border-green-200'
+                  : currentContract.status === CONTRACT_STATUS.COMPLETED
+                  ? 'bg-blue-100 text-blue-800 border-blue-200'
+                  : currentContract.status === CONTRACT_STATUS.DISPUTED
+                  ? 'bg-yellow-100 text-yellow-800 border-yellow-200'
+                  : 'bg-red-100 text-red-800 border-red-200'
+              }`}>
+                {formatStatusText(currentContract.status)}
               </span>
-              {isParticipant && contract.status === 0 && (
+              {isParticipant && currentContract.status === CONTRACT_STATUS.ACTIVE && (
                 <button
                   onClick={() => setIsDisputeModalOpen(true)}
                   className="px-3 py-1 rounded-full text-sm font-medium text-yellow-700 bg-yellow-50 border border-yellow-200 hover:bg-yellow-100 transition-colors"
                 >
                   Open Dispute
+                </button>
+              )}
+              {isClient && currentContract.status === CONTRACT_STATUS.ACTIVE && currentContract.milestones.length === 0 && (
+                <button
+                  onClick={handleCancelContract}
+                  disabled={isSubmitting}
+                  className="px-3 py-1 rounded-full text-sm font-medium text-red-700 bg-red-50 border border-red-200 hover:bg-red-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSubmitting ? 'Processing...' : 'Cancel Contract'}
                 </button>
               )}
             </div>
@@ -353,16 +264,24 @@ const ContractDetails: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="space-y-1">
                 <p className="text-sm text-gray-500">Created</p>
-                <p className="text-gray-900 font-medium">{formatDate(contract.createdAt)}</p>
+                <p className="text-gray-900 font-medium">{new Date(currentContract.createdAt).toLocaleDateString('en-US', {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric'
+                })}</p>
               </div>
               <div className="space-y-1">
                 <p className="text-sm text-gray-500">Deadline</p>
-                <p className="text-gray-900 font-medium">{formatDate(contract.endDate)}</p>
-                <p className="text-sm text-indigo-600">{calculateRemainingTime(contract.endDate)}</p>
+                <p className="text-gray-900 font-medium">{new Date(currentContract.endDate).toLocaleDateString('en-US', {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric'
+                })}</p>
+                <p className="text-sm text-indigo-600">{calculateRemainingTime(currentContract.endDate).text}</p>
               </div>
               <div className="space-y-1">
                 <p className="text-sm text-gray-500">Total Value</p>
-                <p className="text-gray-900 font-medium">{formatAmount(contract.totalAmount)}</p>
+                <p className="text-gray-900 font-medium">{formatSuiAmount(currentContract.totalAmount)}</p>
               </div>
             </div>
           </div>
@@ -388,21 +307,21 @@ const ContractDetails: React.FC = () => {
                   </div>
                 </div>
                 <div className="bg-white p-3 rounded border border-gray-200 font-mono text-sm break-all">
-                  {contract.client}
+                  {currentContract.client}
                 </div>
                 {isClient && (
                   <div className="mt-4 space-y-2">
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-gray-600">Total Contract Value:</span>
-                      <span className="text-sm font-medium">{formatAmount(contract.totalAmount)}</span>
+                      <span className="text-sm font-medium">{formatSuiAmount(currentContract.totalAmount)}</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-gray-600">Released Value:</span>
-                      <span className="text-sm font-medium">{formatAmount(contract.totalAmount - contract.remainingBalance)}</span>
+                      <span className="text-sm font-medium">{formatSuiAmount(currentContract.totalAmount - currentContract.remainingBalance)}</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-gray-600">Remaining Balance:</span>
-                      <span className="text-sm font-medium">{formatAmount(contract.remainingBalance)}</span>
+                      <span className="text-sm font-medium">{formatSuiAmount(currentContract.remainingBalance)}</span>
                     </div>
                   </div>
                 )}
@@ -421,21 +340,21 @@ const ContractDetails: React.FC = () => {
                   </div>
                 </div>
                 <div className="bg-white p-3 rounded border border-gray-200 font-mono text-sm break-all">
-                  {contract.freelancer}
+                  {currentContract.freelancer}
                 </div>
                 {isFreelancer && (
                   <div className="mt-4 space-y-2">
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-gray-600">Total Contract Value:</span>
-                      <span className="text-sm font-medium">{formatAmount(contract.totalAmount)}</span>
+                      <span className="text-sm font-medium">{formatSuiAmount(currentContract.totalAmount)}</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-gray-600">Received Value:</span>
-                      <span className="text-sm font-medium">{formatAmount(contract.totalAmount - contract.remainingBalance)}</span>
+                      <span className="text-sm font-medium">{formatSuiAmount(currentContract.totalAmount - currentContract.remainingBalance)}</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-gray-600">Pending Value:</span>
-                      <span className="text-sm font-medium">{formatAmount(contract.remainingBalance)}</span>
+                      <span className="text-sm font-medium">{formatSuiAmount(currentContract.remainingBalance)}</span>
                     </div>
                   </div>
                 )}
@@ -448,23 +367,23 @@ const ContractDetails: React.FC = () => {
         <div className="bg-white rounded-xl shadow-lg overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
             <h2 className="text-lg font-semibold text-gray-900">Progress Overview</h2>
-            <span className="text-sm text-gray-500">{contract.milestones.filter(m => m.status === 2).length} of {contract.milestones.length} milestones completed</span>
+            <span className="text-sm text-gray-500">{currentContract.milestones.filter(m => m.status === 2).length} of {currentContract.milestones.length} milestones completed</span>
           </div>
           <div className="px-6 py-5">
             <div className="mb-2 flex justify-between">
               <span className="text-sm font-medium text-gray-700">
-                {calculateProgress(contract)}% Complete
+                {calculateProgress(currentContract)}% Complete
               </span>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-2.5">
               <div 
                 className="bg-gradient-to-r from-indigo-500 to-purple-500 h-2.5 rounded-full transition-all duration-700 ease-out"
-                style={{ width: `${calculateProgress(contract)}%` }}
+                style={{ width: `${calculateProgress(currentContract)}%` }}
               ></div>
             </div>
             
             <div className="mt-8 flex flex-col sm:flex-row sm:justify-end gap-4">
-              {isClient && contract.status === 0 && (
+              {isClient && currentContract.status === CONTRACT_STATUS.ACTIVE && (
                 <button
                   onClick={() => setMilestoneFormVisible(true)}
                   className="px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg shadow hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors flex items-center justify-center"
@@ -499,8 +418,8 @@ const ContractDetails: React.FC = () => {
                 transition={{ duration: 0.3 }}
               >
                 <MilestoneForm 
-                  escrowId={contract.id} 
-                  totalAmount={contract.totalAmount} 
+                  escrowId={currentContract.id} 
+                  totalAmount={currentContract.remainingBalance} 
                   onMilestoneAdded={handleMilestoneAdded}
                   onCancel={() => setMilestoneFormVisible(false)}
                 />
@@ -509,11 +428,11 @@ const ContractDetails: React.FC = () => {
           </AnimatePresence>
           
           <MilestoneList
-            escrowId={contract.id}
-            milestones={contract.milestones}
-            clientAddress={contract.client}
-            freelancerAddress={contract.freelancer}
-            refreshData={() => setRefreshTrigger(prev => prev + 1)}
+            escrowId={currentContract.id}
+            milestones={currentContract.milestones}
+            clientAddress={currentContract.client}
+            freelancerAddress={currentContract.freelancer}
+            refreshData={refresh}
           />
         </div>
         
@@ -525,54 +444,94 @@ const ContractDetails: React.FC = () => {
                 <h3 className="text-lg font-semibold text-white">Open Dispute</h3>
               </div>
               <div className="p-6">
-                <div className="mb-4">
-                  <label htmlFor="disputeReason" className="block text-sm font-medium text-gray-700 mb-1">
-                    Reason for Dispute
-                  </label>
-                  <textarea
-                    id="disputeReason"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
-                    value={disputeReason}
-                    onChange={(e) => setDisputeReason(e.target.value)}
-                    required
-                    rows={4}
-                    placeholder="Explain why you are opening a dispute..."
-                  />
-                </div>
-                <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-100 mb-6">
-                  <div className="flex items-start">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-yellow-600 mt-0.5 mr-1.5" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                    </svg>
-                    <div className="ml-2">
-                      <p className="text-sm text-yellow-700">
-                        Opening a dispute will lock the contract until the dispute is resolved. This process involves community voting.
-                      </p>
+                {transactionHash ? (
+                  <div className="mb-6">
+                    <div className="flex items-center justify-center mb-4">
+                      <div className="bg-yellow-100 rounded-full p-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                      </div>
+                    </div>
+                    <h4 className="text-center text-lg font-medium text-gray-900 mb-2">Dispute Opened Successfully!</h4>
+                    <p className="text-sm text-gray-600 mb-4 text-center">
+                      Your dispute has been opened on the blockchain. The contract is now in a disputed state.
+                    </p>
+                    
+                    <p className="text-sm text-gray-600 mb-2">Transaction Hash:</p>
+                    <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 mb-4">
+                      <p className="font-mono text-xs text-gray-800 break-all">{transactionHash}</p>
+                    </div>
+                    
+                    <div className="text-center">
+                      <a 
+                        href={`https://suiscan.xyz/testnet/tx/${transactionHash}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-yellow-600 hover:text-yellow-800 inline-block mb-2"
+                      >
+                        View on Explorer
+                      </a>
                     </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="mb-4">
+                    <label htmlFor="disputeReason" className="block text-sm font-medium text-gray-700 mb-1">
+                      Reason for Dispute
+                    </label>
+                    <textarea
+                      id="disputeReason"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+                      value={disputeReason}
+                      onChange={(e) => setDisputeReason(e.target.value)}
+                      required
+                      rows={4}
+                      placeholder="Explain why you are opening a dispute..."
+                      disabled={isSubmitting}
+                    />
+                  </div>
+                )}
+                
+                {!transactionHash && (
+                  <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-100 mb-6">
+                    <div className="flex items-start">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-yellow-600 mt-0.5 mr-1.5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                      <div className="ml-2">
+                        <p className="text-sm text-yellow-700">
+                          Opening a dispute will lock the contract until the dispute is resolved. This process involves community voting.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
                 <div className="flex justify-end space-x-4">
                   <button
                     onClick={() => setIsDisputeModalOpen(false)}
                     className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors"
+                    disabled={isSubmitting}
                   >
-                    Cancel
+                    {transactionHash ? 'Close' : 'Cancel'}
                   </button>
-                  <button
-                    onClick={handleOpenDispute}
-                    className="px-4 py-2 text-sm font-medium text-white bg-yellow-600 rounded-lg hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 transition-colors disabled:bg-yellow-400 disabled:cursor-not-allowed"
-                    disabled={isSubmitting || !disputeReason.trim()}
-                  >
-                    {isSubmitting ? (
-                      <div className="flex items-center">
-                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        Processing...
-                      </div>
-                    ) : "Open Dispute"}
-                  </button>
+                  {!transactionHash && (
+                    <button
+                      onClick={handleOpenDispute}
+                      className="px-4 py-2 text-sm font-medium text-white bg-yellow-600 rounded-lg hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 transition-colors disabled:bg-yellow-400 disabled:cursor-not-allowed flex items-center"
+                      disabled={isSubmitting || !disputeReason.trim()}
+                    >
+                      {isSubmitting ? (
+                        <div className="flex items-center">
+                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Processing on Blockchain...
+                        </div>
+                      ) : "Open Dispute"}
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
