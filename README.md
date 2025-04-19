@@ -109,7 +109,7 @@ Until the conclusion of the hackathon:
 - **NO FORKS** or derivative works are permitted
 - This code may not be used in any other hackathon or competitive submission
 
-Please see the [LICENSE.md](./LICENSE.md) file for detailed terms and restrictions.
+Please see the [LICENSE](./LICENSE) file for detailed terms and restrictions.
 
 The project will be released under a standard open source license after the hackathon concludes.
 
