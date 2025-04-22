@@ -1,7 +1,5 @@
 # SuiEscrow: Decentralized Milestone Payment System
 
-![SuiEscrow Banner](https://example.com/banner-placeholder.png)
-
 SuiEscrow is a decentralized escrow and milestone-based payment system built on the Sui blockchain. It enables secure, transparent, and trustless collaboration between clients and freelancers.
 
 ## 🌟 Features
