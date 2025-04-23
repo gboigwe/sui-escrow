@@ -11,6 +11,7 @@ import {
   formatStatusText,
   CONTRACT_STATUS
 } from '../../utils/contracts';
+import CustomConnectButton from '../common/CustomConnectButton';
 
 const ContractDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -42,14 +43,14 @@ const ContractDetails: React.FC = () => {
 
   // Load contract data
   const fetchContractDetails = useCallback(async () => {
-    if (!id) return;
+    if (!id || !isConnected) return;
     
     try {
       await loadContract(id);
     } catch (err) {
       console.error('Failed to fetch contract details:', err);
     }
-  }, [id, loadContract]);
+  }, [id, isConnected, loadContract]);
 
   // Handle opening a dispute
   const handleOpenDispute = async () => {
@@ -116,7 +117,7 @@ const ContractDetails: React.FC = () => {
     refresh();
   };
 
-  // Fetch contract data on component mount
+  // Fetch contract data on component mount and when ID changes
   useEffect(() => {
     if (isConnected && id) {
       fetchContractDetails();
@@ -137,17 +138,17 @@ const ContractDetails: React.FC = () => {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
         </svg>
         <p className="text-gray-600 mb-6 text-lg">Connect your wallet to view contract details</p>
-        <button
-          onClick={() => {}} // No action needed here as ConnectButton will be rendered by dapp-kit
-          className="px-6 py-3 text-base font-medium text-white bg-indigo-600 rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
-        >
-          Connect Wallet
-        </button>
+        <CustomConnectButton
+          variant="primary"
+          size="lg"
+          label="Connect Wallet"
+          className="shadow-md transition-colors"
+        />
       </div>
     );
   }
 
-  if (loading) {
+  if (loading && !currentContract) {
     return (
       <div className="flex flex-col items-center justify-center py-12">
         <div className="w-16 h-16 relative">
