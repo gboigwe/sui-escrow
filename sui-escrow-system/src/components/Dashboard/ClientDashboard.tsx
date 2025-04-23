@@ -3,79 +3,18 @@ import { Link } from 'react-router-dom';
 import { useWallet } from '../../context/WalletContext';
 import { motion } from 'framer-motion';
 import CustomConnectButton from '../common/CustomConnectButton';
-
-// Mock data interface (to be replaced with actual contract data)
-interface Milestone {
-  description: string;
-  amount: number;
-  status: number;
-  deadline: number;
-  submissionNote: string;
-  rejectionReason: string;
-}
-
-interface EscrowContract {
-  id: string;
-  client: string;
-  freelancer: string;
-  totalAmount: number;
-  remainingBalance: number;
-  status: number;
-  milestones: Milestone[];
-  createdAt: number;
-  endDate: number;
-  description: string;
-}
-
-// Mock data (to be replaced with data from smart contract)
-const MOCK_CONTRACTS: EscrowContract[] = [
-  {
-    id: "contract-1",
-    client: "0x1234567890abcdef1234567890abcdef12345678",
-    freelancer: "0xabcdef1234567890abcdef1234567890abcdef12",
-    totalAmount: 5000000000, // 5 SUI (in MIST)
-    remainingBalance: 3000000000,
-    status: 0, // Active
-    milestones: [
-      {
-        description: "Website Design",
-        amount: 2000000000,
-        status: 2, // Approved
-        deadline: Date.now() + 86400000 * 7, // 7 days from now
-        submissionNote: "Completed the design as requested. Figma file link: https://figma.com/file/...",
-        rejectionReason: "",
-      },
-      {
-        description: "Frontend Development",
-        amount: 3000000000,
-        status: 0, // Pending
-        deadline: Date.now() + 86400000 * 14, // 14 days from now
-        submissionNote: "",
-        rejectionReason: "",
-      },
-    ],
-    createdAt: Date.now() - 86400000 * 3, // 3 days ago
-    endDate: Date.now() + 86400000 * 30, // 30 days from now
-    description: "Portfolio website redesign with React and TailwindCSS",
-  },
-  {
-    id: "contract-2",
-    client: "0x1234567890abcdef1234567890abcdef12345678",
-    freelancer: "0xdef1234567890abcdef1234567890abcdef123456",
-    totalAmount: 3000000000, // 3 SUI
-    remainingBalance: 3000000000,
-    status: 0, // Active
-    milestones: [],
-    createdAt: Date.now() - 86400000 * 1, // 1 day ago
-    endDate: Date.now() + 86400000 * 20, // 20 days from now
-    description: "Mobile app UI design for e-commerce platform",
-  }
-];
+import * as SuiClient from '../../utils/suiClient';
+import { Transaction } from '@mysten/sui/transactions';
+import { useSignAndExecuteTransaction } from '@mysten/dapp-kit';
+import { EscrowContract } from '../../utils/contracts';
 
 const ClientDashboard: React.FC = () => {
-  const { address, isConnected } = useWallet();
+  const { address, isConnected, suiClient } = useWallet();
   const [contracts, setContracts] = useState<EscrowContract[]>([]);
   const [loading, setLoading] = useState(true);
+  const [consolidating, setConsolidating] = useState(false);
+  
+  const { mutate: signAndExecuteTransactionBlock } = useSignAndExecuteTransaction();
 
   // Status text mapping
   const getStatusText = (status: number) => {
@@ -105,8 +44,8 @@ const ClientDashboard: React.FC = () => {
   };
 
   // Format SUI amount
-  const formatAmount = (amount: number) => {
-    return (amount / 1_000_000_000).toFixed(9) + ' SUI';
+  const formatAmount = (amount: bigint) => {
+    return (Number(amount) / 1_000_000_000).toFixed(9) + ' SUI';
   };
 
   // Get milestone status counts
@@ -118,18 +57,89 @@ const ClientDashboard: React.FC = () => {
     
     return `${approved}/${total} completed`;
   };
+
+  // Consolidate coins function
+  const consolidateCoins = async () => {
+    if (!address) return;
+    
+    try {
+      setConsolidating(true);
+      
+      const coins = await suiClient.getCoins({
+        owner: address,
+        coinType: '0x2::sui::SUI',
+      });
+      
+      const availableCoins = coins.data.filter(coin => BigInt(coin.balance) > 0);
+      
+      if (availableCoins.length <= 1) {
+        alert("No need to consolidate - you already have coins in a single object.");
+        return;
+      }
+      
+      const tx = new Transaction();
+      tx.setGasBudget(10_000_000);
+      
+      // Select the coin with the largest balance as primary
+      const primaryCoin = availableCoins.reduce((prev, current) => 
+        BigInt(current.balance) > BigInt(prev.balance) ? current : prev
+      );
+      
+      // Merge all other coins into the primary coin
+      const otherCoins = availableCoins
+        .filter(coin => coin.coinObjectId !== primaryCoin.coinObjectId)
+        .map(coin => tx.object(coin.coinObjectId));
+      
+      if (otherCoins.length > 0) {
+        tx.mergeCoins(tx.object(primaryCoin.coinObjectId), otherCoins);
+      }
+      
+      // Execute merge transaction
+      await new Promise<void>((resolve, reject) => {
+        signAndExecuteTransactionBlock(
+          {
+            transaction: tx,
+          },
+          {
+            onSuccess: () => {
+              alert("Coins consolidated successfully! You can now create larger contracts.");
+              resolve();
+            },
+            onError: (error) => {
+              console.error('Error consolidating coins:', error);
+              reject(error);
+            },
+          }
+        );
+      });
+    } catch (error) {
+      console.error('Error consolidating coins:', error);
+      alert("Failed to consolidate coins. " + (error instanceof Error ? error.message : "Unknown error"));
+    } finally {
+      setConsolidating(false);
+    }
+  };
   
   // Fetch contracts
   useEffect(() => {
-    if (isConnected) {
-      // Simulate network delay
-      const timer = setTimeout(() => {
-        // Filter for contracts where current user is the client
-        const clientContracts = MOCK_CONTRACTS.filter(
-          (contract) => contract.client === address || contract.client === "0x1234567890abcdef1234567890abcdef12345678"
-        );
-        setContracts(clientContracts);
-        setLoading(false);
+    if (isConnected && address) {
+      const timer = setTimeout(async () => {
+        try {
+          const userContracts = await SuiClient.getUserEscrowContracts(address);
+          console.log("User contracts from blockchain:", userContracts);
+          
+          // Filter only contracts where current address is the CLIENT
+          const clientContracts = userContracts.filter(
+            (contract) => contract.client === address
+          );
+          console.log("Client contracts:", clientContracts);
+          
+          setContracts(clientContracts);
+          setLoading(false);
+        } catch (err) {
+          console.error("Error loading contracts:", err);
+          setLoading(false);
+        }
       }, 800);
       
       return () => clearTimeout(timer);
@@ -138,7 +148,7 @@ const ClientDashboard: React.FC = () => {
 
   if (!isConnected) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 bg-white shadow-md rounded-lg p-8 text-center">
+      <div className="flex flex-col items-center justify-center h-64 bg-white rounded-xl shadow-lg p-8 text-center">
         <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-indigo-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
         </svg>
@@ -165,15 +175,24 @@ const ClientDashboard: React.FC = () => {
           <h2 className="text-2xl font-bold text-gray-900">My Client Contracts</h2>
           <p className="text-gray-600 mt-1">Track and manage contracts where you are the client</p>
         </div>
-        <Link
-          to="/create-contract"
-          className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="-ml-1 mr-2 h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-            <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
-          </svg>
-          Create New Contract
-        </Link>
+        <div className="flex gap-4">
+          <button
+            onClick={consolidateCoins}
+            disabled={consolidating}
+            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+          >
+            {consolidating ? "Consolidating..." : "Consolidate SUI Coins"}
+          </button>
+          <Link
+            to="/create-contract"
+            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="-ml-1 mr-2 h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+            </svg>
+            Create New Contract
+          </Link>
+        </div>
       </div>
 
       {loading ? (
@@ -247,8 +266,8 @@ const ClientDashboard: React.FC = () => {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {contracts.map((contract) => (
-                  <tr key={contract.id} className="hover:bg-gray-50 cursor-pointer transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap" onClick={() => window.location.href = `/contract/${contract.id}`}>
+                  <tr key={contract.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-indigo-600 hover:text-indigo-900">
                         <Link to={`/contract/${contract.id}`}>
                           {contract.description.length > 30
@@ -312,7 +331,7 @@ const ClientDashboard: React.FC = () => {
             <h3 className="text-lg font-medium text-gray-900">Your Client Address</h3>
           </div>
           <div className="bg-gray-50 p-4 rounded-md">
-            <p className="text-sm text-gray-500 mb-1">Your wallet address:</p>
+            <p className="text-sm text-gray-500 mb-1">Your wallet address (as client):</p>
             <div className="flex items-center justify-between">
               <code className="text-indigo-700 font-mono bg-indigo-50 px-2 py-1 rounded text-sm overflow-x-auto max-w-xs">
                 {address}
