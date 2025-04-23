@@ -204,10 +204,10 @@ const ContractCreationForm: React.FC = () => {
       return;
     }
     
-    setIsSubmitting(true);
-    
+    // In ContractCreationForm.tsx, enhance error handling
     try {
-      // Call the createContract function from useEscrow hook
+      setIsSubmitting(true);
+      
       const result = await createContract(
         formData.freelancerAddress,
         formData.description,
@@ -218,6 +218,11 @@ const ContractCreationForm: React.FC = () => {
       if (result.success) {
         // Set transaction hash for display in success message
         setTransactionHash(result.txDigest || null);
+        
+        // Store contract ID if available
+        if (result.escrowId) {
+          console.log("Contract created with ID:", result.escrowId);
+        }
         
         // Show success message and then redirect
         setShowSuccessMessage(true);
@@ -230,14 +235,29 @@ const ContractCreationForm: React.FC = () => {
         console.error('Error creating contract:', result.error);
         setErrors(prev => ({
           ...prev,
-          // Add a generic error if needed
-          description: 'Failed to create contract. Please try again.'
+          description: result.error || 'Failed to create contract. Please try again.'
         }));
         setIsSubmitting(false);
       }
     } catch (error) {
-      console.error('Error creating contract:', error);
-      setIsSubmitting(false);
+        console.error('Error creating contract:', error);
+        let errorMessage = 'Failed to create contract. Please try again.';
+        
+        if (error instanceof Error) {
+          if (error.message.includes("InsufficientCoinBalance")) {
+            errorMessage = "You don't have enough SUI in a single coin object. Try consolidating your coins first or using a smaller amount.";
+          } else if (error.message.includes("GasBalanceTooLow")) {
+            errorMessage = "Gas balance too low. Please ensure you have enough SUI for transaction fees.";
+          } else {
+            errorMessage = error.message;
+          }
+        }
+        
+        setErrors(prev => ({
+          ...prev,
+          description: errorMessage
+        }));
+        setIsSubmitting(false);
     }
   };
 
