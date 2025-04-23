@@ -75,7 +75,7 @@ const Header: React.FC = () => {
           
           {/* Desktop Navigation */}
           <nav className={`hidden md:flex items-center space-x-1 transition-all duration-500 ease-out ${animateItems ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}>
-            {navLinks.map((link, index) => {
+            {navLinks.map((link) => {
               const isActive = location.pathname === link.path;
               return (
                 <Link
@@ -83,10 +83,9 @@ const Header: React.FC = () => {
                   to={link.path}
                   className={`relative px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
                     isActive 
-                      ? 'text-indigo-600' 
+                      ? 'text-indigo-600 bg-indigo-50' 
                       : 'text-gray-600 hover:text-indigo-600 hover:bg-indigo-50/50'
                   }`}
-                  style={{ transitionDelay: `${index * 50}ms` }}
                 >
                   {link.name}
                   {isActive && (
