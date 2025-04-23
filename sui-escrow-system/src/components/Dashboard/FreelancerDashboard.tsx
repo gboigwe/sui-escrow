@@ -3,99 +3,102 @@ import { Link } from 'react-router-dom';
 import { useWallet } from '../../context/WalletContext';
 import { motion } from 'framer-motion';
 import CustomConnectButton from '../common/CustomConnectButton';
+import * as SuiClient from '../../utils/suiClient';
+import { EscrowContract } from '../../utils/contracts';
 
 // Mock data interface (to be replaced with actual contract data)
-interface Milestone {
-  description: string;
-  amount: number;
-  status: number;
-  deadline: number;
-  submissionNote: string;
-  rejectionReason: string;
-}
+// Replace the existing interface
+// interface Milestone {
+//   description: string;
+//   amount: bigint;  // Changed from number to bigint
+//   status: number;
+//   deadline: number;
+//   submissionNote: string;
+//   rejectionReason: string;
+// }
 
-interface EscrowContract {
-  id: string;
-  client: string;
-  freelancer: string;
-  totalAmount: number;
-  remainingBalance: number;
-  status: number;
-  milestones: Milestone[];
-  createdAt: number;
-  endDate: number;
-  description: string;
-}
+// interface EscrowContract {
+//   id: string;
+//   client: string;
+//   freelancer: string;
+//   totalAmount: bigint;  // Changed from number to bigint
+//   remainingBalance: bigint;  // Changed from number to bigint
+//   status: number;
+//   milestones: Milestone[];
+//   createdAt: number;
+//   endDate: number;
+//   description: string;
+// }
 
 // Mock data (to be replaced with data from smart contract)
-const MOCK_CONTRACTS: EscrowContract[] = [
-  {
-    id: "contract-1",
-    client: "0x1234567890abcdef1234567890abcdef12345678",
-    freelancer: "0xabcdef1234567890abcdef1234567890abcdef12",
-    totalAmount: 5000000000, // 5 SUI (in MIST)
-    remainingBalance: 3000000000,
-    status: 0, // Active
-    milestones: [
-      {
-        description: "Website Design",
-        amount: 2000000000,
-        status: 2, // Approved
-        deadline: Date.now() + 86400000 * 7, // 7 days from now
-        submissionNote: "Completed the design as requested. Figma file link: https://figma.com/file/...",
-        rejectionReason: "",
-      },
-      {
-        description: "Frontend Development",
-        amount: 3000000000,
-        status: 0, // Pending
-        deadline: Date.now() + 86400000 * 14, // 14 days from now
-        submissionNote: "",
-        rejectionReason: "",
-      },
-    ],
-    createdAt: Date.now() - 86400000 * 3, // 3 days ago
-    endDate: Date.now() + 86400000 * 30, // 30 days from now
-    description: "Portfolio website redesign with React and TailwindCSS",
-  },
-  {
-    id: "contract-3",
-    client: "0xfedcba9876543210fedcba9876543210fedcba98",
-    freelancer: "0xabcdef1234567890abcdef1234567890abcdef12", 
-    totalAmount: 7000000000, // 7 SUI
-    remainingBalance: 7000000000,
-    status: 0, // Active
-    milestones: [
-      {
-        description: "Logo Design",
-        amount: 1500000000,
-        status: 0, // Pending
-        deadline: Date.now() + 86400000 * 5, // 5 days from now
-        submissionNote: "",
-        rejectionReason: "",
-      },
-      {
-        description: "Brand Guidelines",
-        amount: 2500000000,
-        status: 0, // Pending
-        deadline: Date.now() + 86400000 * 10, // 10 days from now
-        submissionNote: "",
-        rejectionReason: "",
-      },
-      {
-        description: "Marketing Materials",
-        amount: 3000000000,
-        status: 0, // Pending
-        deadline: Date.now() + 86400000 * 15, // 15 days from now
-        submissionNote: "",
-        rejectionReason: "",
-      }
-    ],
-    createdAt: Date.now() - 86400000 * 1, // 1 day ago
-    endDate: Date.now() + 86400000 * 20, // 20 days from now
-    description: "Branding package for tech startup",
-  }
-];
+// const MOCK_CONTRACTS: EscrowContract[] = [
+//   {
+//     id: "contract-1",
+//     client: "0x1234567890abcdef1234567890abcdef12345678",
+//     freelancer: "0xabcdef1234567890abcdef1234567890abcdef12",
+//     totalAmount: BigInt(5000000000), // 5 SUI (in MIST)
+//     remainingBalance: BigInt(3000000000),
+//     status: 0, // Active
+//     milestones: [
+//       {
+//         description: "Website Design",
+//         amount: BigInt(2000000000),
+//         status: 2, // Approved
+//         deadline: Date.now() + 86400000 * 7, // 7 days from now
+//         submissionNote: "Completed the design as requested. Figma file link: https://figma.com/file/...",
+//         rejectionReason: "",
+//       },
+//       {
+//         description: "Frontend Development",
+//         amount: BigInt(3000000000),
+//         status: 0, // Pending
+//         deadline: Date.now() + 86400000 * 14, // 14 days from now
+//         submissionNote: "",
+//         rejectionReason: "",
+//       },
+//     ],
+//     createdAt: Date.now() - 86400000 * 3, // 3 days ago
+//     endDate: Date.now() + 86400000 * 30, // 30 days from now
+//     description: "Portfolio website redesign with React and TailwindCSS",
+//   },
+//   {
+//     id: "contract-3",
+//     client: "0xfedcba9876543210fedcba9876543210fedcba98",
+//     freelancer: "0xabcdef1234567890abcdef1234567890abcdef12", 
+//     totalAmount: BigInt(7000000000), // 7 SUI
+//     remainingBalance: BigInt(7000000000),
+//     status: 0, // Active
+//     milestones: [
+//       {
+//         description: "Logo Design",
+//         amount: BigInt(1500000000),
+//         status: 0, // Pending
+//         deadline: Date.now() + 86400000 * 5, // 5 days from now
+//         submissionNote: "",
+//         rejectionReason: "",
+//       },
+//       {
+//         description: "Brand Guidelines",
+//         amount: BigInt(2500000000),
+//         status: 0, // Pending
+//         deadline: Date.now() + 86400000 * 10, // 10 days from now
+//         submissionNote: "",
+//         rejectionReason: "",
+//       },
+//       {
+//         description: "Marketing Materials",
+//         amount: BigInt(3000000000),
+//         status: 0, // Pending
+//         deadline: Date.now() + 86400000 * 15, // 15 days from now
+//         submissionNote: "",
+//         rejectionReason: "",
+//       }
+//     ],
+//     createdAt: Date.now() - 86400000 * 1, // 1 day ago
+//     endDate: Date.now() + 86400000 * 20, // 20 days from now
+//     description: "Branding package for tech startup",
+//   }
+// ];
 
 const FreelancerDashboard: React.FC = () => {
   const { address, isConnected } = useWallet();
@@ -130,15 +133,15 @@ const FreelancerDashboard: React.FC = () => {
   // };
 
   // Format SUI amount
-  const formatAmount = (amount: number) => {
-    return (amount / 1_000_000_000).toFixed(9) + ' SUI';
+  const formatAmount = (amount: bigint) => {
+    return (Number(amount) / 1_000_000_000).toFixed(9) + ' SUI';
   };
 
   // Get earned amount
   const getEarnedAmount = (contract: EscrowContract) => {
     const earnedAmount = contract.milestones
       .filter(m => m.status === 2)
-      .reduce((total, milestone) => total + milestone.amount, 0);
+      .reduce((total, milestone) => total + milestone.amount, BigInt(0)); // Initialize with BigInt(0)
     
     return formatAmount(earnedAmount);
   };
@@ -169,16 +172,27 @@ const FreelancerDashboard: React.FC = () => {
   };
   
   // Fetch contracts
+  // In FreelancerDashboard.tsx
   useEffect(() => {
-    if (isConnected) {
-      // Simulate network delay
-      const timer = setTimeout(() => {
-        // Filter for contracts where current user is the freelancer
-        const freelancerContracts = MOCK_CONTRACTS.filter(
-          (contract) => contract.freelancer === address || contract.freelancer === "0xabcdef1234567890abcdef1234567890abcdef12"
-        );
-        setContracts(freelancerContracts);
-        setLoading(false);
+    if (isConnected && address) {
+      const timer = setTimeout(async () => {
+        try {
+          // Try to load contracts directly
+          const contracts = await SuiClient.getUserEscrowContracts(address);
+          console.log("Loaded contracts:", contracts);
+          
+          // Filter for contracts where current address is the FREELANCER only
+          const freelancerContracts = contracts.filter(
+            (contract) => contract.freelancer === address
+          );
+          console.log("Freelancer contracts:", freelancerContracts);
+          
+          setContracts(freelancerContracts);
+          setLoading(false);
+        } catch (err) {
+          console.error("Error loading contracts:", err);
+          setLoading(false);
+        }
       }, 800);
       
       return () => clearTimeout(timer);
@@ -341,7 +355,7 @@ const FreelancerDashboard: React.FC = () => {
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-purple-600 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
             </svg>
-            <h3 className="text-lg font-medium text-gray-900">Your Freelance Address</h3>
+            <h3 className="text-lg font-medium text-gray-900">Your Freelancer Address</h3>
           </div>
           <div className="bg-gray-50 p-4 rounded-md">
             <p className="text-sm text-gray-500 mb-1">Share this address with clients to receive contracts:</p>
