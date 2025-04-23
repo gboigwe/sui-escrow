@@ -1,33 +1,50 @@
-// src/hooks/useEscrow.ts
 import { useState, useEffect, useCallback } from 'react';
 import { Transaction } from '@mysten/sui/transactions';
 import { useCurrentAccount, useSignAndExecuteTransaction, useSuiClient } from '@mysten/dapp-kit';
 import * as SuiClient from '../utils/suiClient';
 import { EscrowContract } from '../utils/contracts';
 
+// Add the interface and type guard function here
+interface CreatedObjectChange {
+  type: "created";
+  sender: string;
+  owner: any;
+  objectType: string;
+  objectId: string;
+  version: string;
+  digest: string;
+}
+
+function isCreatedObject(change: any): change is CreatedObjectChange {
+  return change.type === "created" && 'objectId' in change;
+}
+
 export const useEscrow = () => {
   const currentAccount = useCurrentAccount();
   const suiClient = useSuiClient();
   const { mutate: signAndExecuteTransactionBlock } = useSignAndExecuteTransaction({
-  // Custom execute function with error handling
-  execute: async ({ bytes, signature }) => {
-    try {
-      return await suiClient.executeTransactionBlock({
+    // Custom execute function with error handling
+    execute: async ({ bytes, signature }) => {
+      try {
+        const result = await suiClient.executeTransactionBlock({
           transactionBlock: bytes,
           signature,
           options: {
             showEvents: true,
             showEffects: true,
-            showObjectChanges: true, // Add this
+            showObjectChanges: true,
+            showInput: true,
           },
-      });
+        });
+        console.log("Raw transaction result:", result);
+        return result;
       } catch (error) {
         console.error("Transaction execution error:", error);
         throw error;
       }
     },
     onError: (error) => {
-        console.error("Transaction error:", error);
+      console.error("Transaction error:", error);
     }
   });
   
@@ -91,6 +108,101 @@ export const useEscrow = () => {
     }
   }, []);
 
+  // In useEscrow.ts, update the mergeSUICoins function
+const mergeSUICoins = async (amount: bigint): Promise<string | null> => {
+    try {
+      if (!address) return null;
+      
+      console.log("Starting coin merge process for amount:", amount.toString());
+      
+      // Get all SUI coins owned by the user
+      const coins = await suiClient.getCoins({
+        owner: address,
+        coinType: '0x2::sui::SUI',
+      });
+      
+      // Filter coins to find those with balance
+      const availableCoins = coins.data.filter(coin => BigInt(coin.balance) > 0);
+      
+      // Calculate total balance
+      const totalBalance = availableCoins.reduce((acc, coin) => acc + BigInt(coin.balance), BigInt(0));
+      
+      console.log("Available coins:", availableCoins.length);
+      console.log("Total balance:", totalBalance.toString());
+      console.log("Required amount:", amount.toString());
+      
+      if (totalBalance < amount) {
+        throw new Error(`Insufficient balance. You have ${totalBalance / BigInt(1_000_000_000)} SUI, need ${amount / BigInt(1_000_000_000)} SUI`);
+      }
+      
+      // If we have enough in a single coin, return that coin
+      const singleCoinWithEnough = availableCoins.find(coin => BigInt(coin.balance) >= amount);
+      if (singleCoinWithEnough) {
+        console.log("Found single coin with enough balance:", singleCoinWithEnough.coinObjectId);
+        return singleCoinWithEnough.coinObjectId;
+      }
+      
+      // Otherwise, merge coins first
+      if (availableCoins.length <= 1) {
+        // No coins to merge
+        console.log("No coins to merge");
+        return availableCoins[0]?.coinObjectId || null;
+      }
+      
+      const tx = new Transaction();
+      tx.setGasBudget(50_000_000);
+      
+      // Select the coin with the largest balance as the primary coin
+      const primaryCoin = availableCoins.reduce((prev, current) => 
+        BigInt(current.balance) > BigInt(prev.balance) ? current : prev
+      );
+      
+      console.log("Primary coin for merge:", primaryCoin.coinObjectId);
+      
+      // Merge other coins into the primary coin
+      const otherCoins = availableCoins
+        .filter(coin => coin.coinObjectId !== primaryCoin.coinObjectId)
+        .map(coin => tx.object(coin.coinObjectId));
+      
+      if (otherCoins.length > 0) {
+        console.log("Merging", otherCoins.length, "coins into primary coin");
+        tx.mergeCoins(tx.object(primaryCoin.coinObjectId), otherCoins);
+      }
+      
+      // Execute merge transaction
+      const mergeResult = await new Promise<boolean>((resolve) => {
+        signAndExecuteTransactionBlock(
+          {
+            transaction: tx,
+          },
+          {
+            onSuccess: () => {
+              console.log("Coins merged successfully");
+              resolve(true);
+            },
+            onError: (error) => {
+              console.error("Error merging coins:", error);
+              resolve(false);
+            },
+          }
+        );
+      });
+      
+      if (mergeResult) {
+        // Wait a bit for the merge to propagate
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Return the primary coin ID after merge
+        return primaryCoin.coinObjectId;
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error merging coins:', error);
+      throw error;
+    }
+  };
+
   // Create a new escrow contract
   const createContract = useCallback(async (
     freelancerAddress: string,
@@ -106,86 +218,39 @@ export const useEscrow = () => {
     setLoading(true);
     setError(null);
     
-    // try {
-    //   // Convert amount from SUI to MIST (1 SUI = 10^9 MIST)
-    //   const amountInMist = (parseFloat(amount) * 1_000_000_000).toString();
-      
-    //   // Convert endDate string to timestamp in milliseconds
-    //   const endTimestamp = new Date(endDate).getTime();
-      
-    //   // Create a new transaction
-    //   const tx = new Transaction();
-      
-    //   // Add the create escrow contract transaction
-    //   SuiClient.createEscrowContractTx(tx, {
-    //     clientAddress: address,
-    //     freelancerAddress,
-    //     description,
-    //     endDate: endTimestamp,
-    //     paymentAmount: amountInMist
-    //   });
-      
-    //   // Sign and execute the transaction
-    //   return new Promise<{ success: boolean; escrowId?: string; txDigest?: string; error?: any }>((resolve) => {
-    //     signAndExecuteTransactionBlock(
-    //       {
-    //         transaction: tx,
-    //       },
-    //       {
-    //         onSuccess: (result) => {
-    //           // Extract the created escrow ID from events if available
-    //           let escrowId;
-              
-    //           if ('events' in result && result.events && result.events.length > 0) {
-    //             const escrowCreatedEvent = result.events.find(event => 
-    //               event.type.includes(`${SuiClient.ESCROW_MODULE}::EscrowCreated`)
-    //             );
-                
-    //             if (escrowCreatedEvent && 'parsedJson' in escrowCreatedEvent && escrowCreatedEvent.parsedJson) {
-    //               const parsedJson = escrowCreatedEvent.parsedJson as Record<string, any>;
-    //               escrowId = parsedJson.escrow_id;
-    //             }
-    //           }
-              
-    //           // Reload contracts after creation
-    //           refresh();
-    //           resolve({ success: true, escrowId, txDigest: result.digest });
-    //         },
-    //         onError: (error) => {
-    //           console.error('Error creating contract:', error);
-    //           setError('Failed to create contract: ' + error.message);
-    //           resolve({ success: false, error });
-    //         },
-    //       }
-    //     );
-    //   });
-    // } catch (err) {
-    // Inside the createContract function
     try {
       // Convert amount from SUI to MIST (1 SUI = 10^9 MIST)
-      const amountInMist = (parseFloat(amount) * 1_000_000_000).toString();
+      const amountInMist = BigInt(Math.floor(parseFloat(amount) * 1_000_000_000));
+      
+      // Always try to merge coins first for amounts greater than 1 SUI
+      if (parseFloat(amount) > 1) {
+        console.log("Attempting to merge coins for amount:", amount, "SUI");
+        const mergedCoinId = await mergeSUICoins(amountInMist);
+        if (!mergedCoinId) {
+          console.warn("Coin merge was not successful or not needed");
+        } else {
+          console.log("Successfully merged coins, using coin ID:", mergedCoinId);
+        }
+      }
       
       // Convert endDate string to timestamp in milliseconds
       const endTimestamp = new Date(endDate).getTime();
-
+      
       // Create a new transaction
       const tx = new Transaction();
-    
-      // Set gas budget explicitly
-      tx.setGasBudget(30000000);
-    
+      
       // Add the create escrow contract transaction
       SuiClient.createEscrowContractTx(tx, {
         clientAddress: address,
         freelancerAddress,
         description,
         endDate: endTimestamp,
-        paymentAmount: amountInMist
+        paymentAmount: amountInMist.toString()
       });
-    
+      
       console.log("Transaction prepared:", tx);
-    
-      // Sign and execute the transaction with more detailed error handling
+      
+      // Sign and execute the transaction
       return new Promise<{ success: boolean; escrowId?: string; txDigest?: string; error?: any }>((resolve) => {
         signAndExecuteTransactionBlock(
           {
@@ -194,27 +259,78 @@ export const useEscrow = () => {
           {
             onSuccess: (result) => {
               console.log("Transaction success:", result);
-              // Process result...
-              resolve({ success: true, txDigest: result.digest });
+              
+              let escrowId;
+              
+              // Check events for EscrowCreated
+              if (result.events && result.events.length > 0) {
+                const escrowCreatedEvent = result.events.find((event: any) => 
+                  event.type && event.type.includes(`${SuiClient.ESCROW_MODULE}::EscrowCreated`)
+                );
+                
+                if (escrowCreatedEvent && escrowCreatedEvent.parsedJson) {
+                  const parsedJson = escrowCreatedEvent.parsedJson as { escrow_id?: string };
+                  escrowId = parsedJson.escrow_id;
+                  console.log("Extracted escrow ID from event:", escrowId);
+                }
+              }
+              
+              // Get the contract ID from object changes
+              if (!escrowId && result.objectChanges && result.objectChanges.length > 0) {
+                const contractObject = result.objectChanges.find((change: any) => 
+                  change.type === "created" && 
+                  change.objectType &&
+                  change.objectType.includes("EscrowContract")
+                );
+                
+                if (contractObject && isCreatedObject(contractObject)) {
+                  escrowId = contractObject.objectId;
+                  console.log("Extracted escrow ID from object changes:", escrowId);
+                }
+              }
+              
+              console.log("Contract created successfully with ID:", escrowId || "Unknown");
+              
+              // Reload contracts after creation
+              refresh();
+              resolve({ success: true, escrowId, txDigest: result.digest });
             },
             onError: (error) => {
               console.error('Detailed transaction error:', error);
-              // Add more descriptive error message
-              setError('Failed to create contract. Please check your wallet has sufficient SUI and try again.');
-              resolve({ success: false, error });
+              
+              let errorMessage = "Unknown error";
+              if (error.message) {
+                if (error.message.includes("InsufficientCoinBalance")) {
+                  errorMessage = "Insufficient balance. You might need to consolidate your SUI tokens into a single coin object. Try clicking the 'Consolidate SUI Coins' button in your dashboard.";
+                } else if (error.message.includes("GasBalanceTooLow")) {
+                  errorMessage = "Gas balance too low. Please ensure you have enough SUI for gas fees.";
+                } else {
+                  errorMessage = error.message;
+                }
+              }
+              
+              setError(errorMessage);
+              resolve({ success: false, error: errorMessage });
             },
           }
         );
       });
     } catch (err) {
-      console.error('Error creating contract:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      setError('Failed to create contract: ' + errorMessage);
-      return { success: false, error: err };
-    } finally {
-      setLoading(false);
-    }
-  }, [address, isConnected, signAndExecuteTransactionBlock, refresh]);
+        console.error('Error creating contract:', err);
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        
+        // Provide more detailed error message based on the error
+        if (errorMessage.includes("InsufficientCoinBalance")) {
+          setError('Insufficient balance. Please try consolidating your SUI tokens first by clicking the "Consolidate SUI Coins" button in your dashboard.');
+        } else {
+          setError('Failed to create contract: ' + errorMessage);
+        }
+        
+        return { success: false, error: errorMessage };
+      } finally {
+        setLoading(false);
+      }
+    }, [address, isConnected, signAndExecuteTransactionBlock, refresh, mergeSUICoins]);
 
   // Add a milestone to a contract
   const addMilestone = useCallback(async (
@@ -480,13 +596,13 @@ export const useEscrow = () => {
               // Extract the created dispute ID from events if available
               let disputeId;
               
-              if ('events' in result && result.events && result.events.length > 0) {
-                const disputeCreatedEvent = result.events.find(event => 
-                  event.type.includes(`${SuiClient.DISPUTE_MODULE}::DisputeCreated`)
+              if (result.events && result.events.length > 0) {
+                const disputeCreatedEvent = result.events.find((event: any) => 
+                  event.type && event.type.includes(`${SuiClient.DISPUTE_MODULE}::DisputeCreated`)
                 );
                 
-                if (disputeCreatedEvent && 'parsedJson' in disputeCreatedEvent && disputeCreatedEvent.parsedJson) {
-                  const parsedJson = disputeCreatedEvent.parsedJson as Record<string, any>;
+                if (disputeCreatedEvent && disputeCreatedEvent.parsedJson) {
+                  const parsedJson = disputeCreatedEvent.parsedJson as { dispute_id?: string };
                   disputeId = parsedJson.dispute_id;
                 }
               }
