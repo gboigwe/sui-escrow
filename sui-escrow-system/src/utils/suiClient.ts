@@ -2,6 +2,7 @@
 import { getFullnodeUrl, SuiClient } from '@mysten/sui/client';
 import { Transaction } from '@mysten/sui/transactions';
 import { bcs } from '@mysten/sui/bcs';
+import { EscrowContract } from './contracts';
 
 // Create a client connected to testnet
 export const suiClient = new SuiClient({ 
@@ -29,11 +30,26 @@ export function createEscrowContractTx(tx: Transaction, {
     endDate: number, // timestamp in milliseconds
     paymentAmount: string | number, // in MIST (SUI * 10^9)
   }) {
-    // Set Gas Budget explicitly
-    tx.setGasBudget(30000000); // Set a higher gas budget
+    // Debugging
+    console.log("Creating escrow contract with payment amount:", paymentAmount);
+    console.log("Payment amount type:", typeof paymentAmount);
+    
+    // Set Gas Budget explicitly - increase for larger transactions
+    const gasBudget = BigInt(paymentAmount) > BigInt(5 * 1_000_000_000) 
+      ? 200_000_000  // 0.2 SUI for large transactions
+      : 100_000_000; // 0.1 SUI for normal transactions
+    
+    tx.setGasBudget(gasBudget);
   
     // Split the coin to get the exact amount
-    const [coin] = tx.splitCoins(tx.gas, [tx.pure(bcs.U64.serialize(paymentAmount.toString()))]);
+    console.log("Serializing amount:", paymentAmount.toString());
+    const serializedAmount = bcs.U64.serialize(paymentAmount.toString());
+    console.log("Serialized amount:", serializedAmount);
+    
+    const [coin] = tx.splitCoins(
+      tx.gas, 
+      [tx.pure(serializedAmount)]
+    );
   
     // Get a clock object
     const clock = tx.object('0x6');
@@ -257,7 +273,7 @@ function parseMilestones(milestonesField: any) {
 };
 
 // Fetch user's escrow contracts
-export const getUserEscrowContracts = async (address: string) => {
+export const getUserEscrowContracts = async (address: string): Promise<EscrowContract[]> => {
   try {
     // Query for owned objects that match the escrow type
     const ownedObjects = await suiClient.getOwnedObjects({
@@ -270,15 +286,18 @@ export const getUserEscrowContracts = async (address: string) => {
       }
     });
     
-    const result = [];
+    // Also query for dynamic fields and shared objects where the user is involved
+    // Since EscrowContract is shared, we need to query differently
     
-    // Process directly owned objects
+    const result: EscrowContract[] = [];
+    
+    // Process directly owned objects if any
     if (ownedObjects.data && ownedObjects.data.length > 0) {
       for (const obj of ownedObjects.data) {
         if (obj.data?.content && 'fields' in obj.data.content) {
           const fields = obj.data.content.fields as Record<string, any>;
           
-          // Check if the user is a client or freelancer in this contract
+          // Add all objects where the user is client or freelancer
           if (fields.client === address || fields.freelancer === address) {
             result.push({
               id: obj.data.objectId,
@@ -292,6 +311,39 @@ export const getUserEscrowContracts = async (address: string) => {
               endDate: Number(fields.end_date || '0'),
               description: fields.description || '',
             });
+          }
+        }
+      }
+    }
+    
+    // Since EscrowContract is shared, let's also try to query events to find contracts
+    const events = await suiClient.queryEvents({
+      query: {
+        MoveEventType: `${PACKAGE_ID}::${ESCROW_MODULE}::EscrowCreated`
+      },
+      limit: 50,
+      order: 'descending'
+    });
+    
+    // Process events to find contracts where user is involved
+    if (events.data && events.data.length > 0) {
+      for (const event of events.data) {
+        if (event.parsedJson) {
+          const parsedJson = event.parsedJson as any;
+          
+          // Check if user is involved in this contract
+          if (parsedJson.client === address || parsedJson.freelancer === address) {
+            // Fetch the actual object data
+            try {
+              const objectData = await getEscrowContract(parsedJson.escrow_id);
+              
+              // Check if we already have this contract
+              if (!result.find(c => c.id === objectData.id)) {
+                result.push(objectData);
+              }
+            } catch (err) {
+              console.error('Error fetching contract:', err);
+            }
           }
         }
       }
