@@ -49,11 +49,8 @@ const WalletContentProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   // Enhanced connect function that triggers wallet connection
   const connect = () => {
-    // Find the connect wallet button and click it
-    const connectButton = document.querySelector('[data-testid="connect-button"]') as HTMLButtonElement;
-    if (connectButton) {
-      connectButton.click();
-    }
+    // This is now handled by our CustomConnectButton component
+    console.log("Connect requested via WalletContext");
   };
 
   // Disconnect function

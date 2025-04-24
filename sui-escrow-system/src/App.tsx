@@ -6,13 +6,21 @@ import ClientDashboard from './components/Dashboard/ClientDashboard';
 import FreelancerDashboard from './components/Dashboard/FreelancerDashboard';
 import ContractCreationForm from './components/EscrowContract/ContractCreationForm';
 import ContractDetails from './components/EscrowContract/ContractDetails';
+// import { useEffect } from 'react';
+// import { initWalletModalStyling } from './utils/walletModalStyling';
 import './App.css';
 
 function App() {
+  // Initialize wallet modal styling when the app loads
+  // useEffect(() => {
+  //   const cleanup = initWalletModalStyling();
+  //   return cleanup;
+  // }, []);
+
   return (
     <WalletKitWrapper>
       <Router>
-        <div className="min-h-screen">
+        <div className="">
           <Layout>
             <Routes>
               <Route path="/" element={<HomePage />} />
