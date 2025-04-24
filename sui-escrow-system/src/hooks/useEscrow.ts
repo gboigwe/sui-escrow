@@ -36,7 +36,7 @@ export const useEscrow = () => {
             showInput: true,
           },
         });
-        console.log("Raw transaction result:", result);
+        // console.log("Raw transaction result:", result);
         return result;
       } catch (error) {
         console.error("Transaction execution error:", error);
@@ -113,7 +113,7 @@ const mergeSUICoins = async (amount: bigint): Promise<string | null> => {
     try {
       if (!address) return null;
       
-      console.log("Starting coin merge process for amount:", amount.toString());
+      // console.log("Starting coin merge process for amount:", amount.toString());
       
       // Get all SUI coins owned by the user
       const coins = await suiClient.getCoins({
@@ -127,9 +127,9 @@ const mergeSUICoins = async (amount: bigint): Promise<string | null> => {
       // Calculate total balance
       const totalBalance = availableCoins.reduce((acc, coin) => acc + BigInt(coin.balance), BigInt(0));
       
-      console.log("Available coins:", availableCoins.length);
-      console.log("Total balance:", totalBalance.toString());
-      console.log("Required amount:", amount.toString());
+      // console.log("Available coins:", availableCoins.length);
+      // console.log("Total balance:", totalBalance.toString());
+      // console.log("Required amount:", amount.toString());
       
       if (totalBalance < amount) {
         throw new Error(`Insufficient balance. You have ${totalBalance / BigInt(1_000_000_000)} SUI, need ${amount / BigInt(1_000_000_000)} SUI`);
@@ -138,14 +138,14 @@ const mergeSUICoins = async (amount: bigint): Promise<string | null> => {
       // If we have enough in a single coin, return that coin
       const singleCoinWithEnough = availableCoins.find(coin => BigInt(coin.balance) >= amount);
       if (singleCoinWithEnough) {
-        console.log("Found single coin with enough balance:", singleCoinWithEnough.coinObjectId);
+        // console.log("Found single coin with enough balance:", singleCoinWithEnough.coinObjectId);
         return singleCoinWithEnough.coinObjectId;
       }
       
       // Otherwise, merge coins first
       if (availableCoins.length <= 1) {
         // No coins to merge
-        console.log("No coins to merge");
+        // console.log("No coins to merge");
         return availableCoins[0]?.coinObjectId || null;
       }
       
@@ -157,7 +157,7 @@ const mergeSUICoins = async (amount: bigint): Promise<string | null> => {
         BigInt(current.balance) > BigInt(prev.balance) ? current : prev
       );
       
-      console.log("Primary coin for merge:", primaryCoin.coinObjectId);
+      // console.log("Primary coin for merge:", primaryCoin.coinObjectId);
       
       // Merge other coins into the primary coin
       const otherCoins = availableCoins
@@ -165,7 +165,7 @@ const mergeSUICoins = async (amount: bigint): Promise<string | null> => {
         .map(coin => tx.object(coin.coinObjectId));
       
       if (otherCoins.length > 0) {
-        console.log("Merging", otherCoins.length, "coins into primary coin");
+        // console.log("Merging", otherCoins.length, "coins into primary coin");
         tx.mergeCoins(tx.object(primaryCoin.coinObjectId), otherCoins);
       }
       
@@ -177,7 +177,7 @@ const mergeSUICoins = async (amount: bigint): Promise<string | null> => {
           },
           {
             onSuccess: () => {
-              console.log("Coins merged successfully");
+              // console.log("Coins merged successfully");
               resolve(true);
             },
             onError: (error) => {
@@ -224,7 +224,7 @@ const mergeSUICoins = async (amount: bigint): Promise<string | null> => {
       
       // Always try to merge coins first for amounts greater than 1 SUI
       if (parseFloat(amount) > 1) {
-        console.log("Attempting to merge coins for amount:", amount, "SUI");
+        // console.log("Attempting to merge coins for amount:", amount, "SUI");
         const mergedCoinId = await mergeSUICoins(amountInMist);
         if (!mergedCoinId) {
           console.warn("Coin merge was not successful or not needed");
@@ -248,7 +248,7 @@ const mergeSUICoins = async (amount: bigint): Promise<string | null> => {
         paymentAmount: amountInMist.toString()
       });
       
-      console.log("Transaction prepared:", tx);
+      // console.log("Transaction prepared:", tx);
       
       // Sign and execute the transaction
       return new Promise<{ success: boolean; escrowId?: string; txDigest?: string; error?: any }>((resolve) => {
@@ -258,7 +258,7 @@ const mergeSUICoins = async (amount: bigint): Promise<string | null> => {
           },
           {
             onSuccess: (result) => {
-              console.log("Transaction success:", result);
+              // console.log("Transaction success:", result);
               
               let escrowId;
               
@@ -271,7 +271,7 @@ const mergeSUICoins = async (amount: bigint): Promise<string | null> => {
                 if (escrowCreatedEvent && escrowCreatedEvent.parsedJson) {
                   const parsedJson = escrowCreatedEvent.parsedJson as { escrow_id?: string };
                   escrowId = parsedJson.escrow_id;
-                  console.log("Extracted escrow ID from event:", escrowId);
+                  // console.log("Extracted escrow ID from event:", escrowId);
                 }
               }
               
@@ -285,11 +285,11 @@ const mergeSUICoins = async (amount: bigint): Promise<string | null> => {
                 
                 if (contractObject && isCreatedObject(contractObject)) {
                   escrowId = contractObject.objectId;
-                  console.log("Extracted escrow ID from object changes:", escrowId);
+                  // console.log("Extracted escrow ID from object changes:", escrowId);
                 }
               }
               
-              console.log("Contract created successfully with ID:", escrowId || "Unknown");
+              // console.log("Contract created successfully with ID:", escrowId || "Unknown");
               
               // Reload contracts after creation
               refresh();

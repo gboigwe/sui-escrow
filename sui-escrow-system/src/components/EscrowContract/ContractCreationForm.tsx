@@ -220,9 +220,9 @@ const ContractCreationForm: React.FC = () => {
         setTransactionHash(result.txDigest || null);
         
         // Store contract ID if available
-        if (result.escrowId) {
-          console.log("Contract created with ID:", result.escrowId);
-        }
+        // if (result.escrowId) {
+        //   console.log("Contract created with ID:", result.escrowId);
+        // }
         
         // Show success message and then redirect
         setShowSuccessMessage(true);

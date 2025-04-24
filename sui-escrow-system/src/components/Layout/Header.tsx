@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 // import { useWallet } from '../../context/WalletContext';
 // import { ConnectButton } from '@mysten/dapp-kit';
 import CustomConnectButton from '../common/CustomConnectButton';
+import icon from '../../assets/icon.png';
 
 const Header: React.FC = () => {
   const location = useLocation();
@@ -57,9 +58,14 @@ const Header: React.FC = () => {
               <div className="flex items-center">
                 <div className="relative">
                   <div className="absolute inset-0 bg-indigo-600 rounded-full blur-md opacity-20 group-hover:opacity-40 transition-opacity"></div>
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-9 w-9 text-indigo-600 relative z-10 transition-transform duration-300 ease-out group-hover:scale-110" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  {/* <svg xmlns="http://www.w3.org/2000/svg" className="h-9 w-9 text-indigo-600 relative z-10 transition-transform duration-300 ease-out group-hover:scale-110" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
-                  </svg>
+                  </svg> */}
+                  <img
+                    src={icon}
+                    alt="Company icon"
+                    className="h-12 w-12 text-indigo-600 relative z-10 transition-transform duration-300 ease-out group-hover:scale-110"
+                  />
                 </div>
                 <div className="ml-2.5">
                   <span className="text-2xl font-extrabold tracking-tight">

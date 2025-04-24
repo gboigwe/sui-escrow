@@ -179,13 +179,13 @@ const FreelancerDashboard: React.FC = () => {
         try {
           // Try to load contracts directly
           const contracts = await SuiClient.getUserEscrowContracts(address);
-          console.log("Loaded contracts:", contracts);
+          // console.log("Loaded contracts:", contracts);
           
           // Filter for contracts where current address is the FREELANCER only
           const freelancerContracts = contracts.filter(
             (contract) => contract.freelancer === address
           );
-          console.log("Freelancer contracts:", freelancerContracts);
+          // console.log("Freelancer contracts:", freelancerContracts);
           
           setContracts(freelancerContracts);
           setLoading(false);

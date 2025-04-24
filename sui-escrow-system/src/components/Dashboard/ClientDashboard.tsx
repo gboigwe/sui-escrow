@@ -126,13 +126,13 @@ const ClientDashboard: React.FC = () => {
       const timer = setTimeout(async () => {
         try {
           const userContracts = await SuiClient.getUserEscrowContracts(address);
-          console.log("User contracts from blockchain:", userContracts);
+          // console.log("User contracts from blockchain:", userContracts);
           
           // Filter only contracts where current address is the CLIENT
           const clientContracts = userContracts.filter(
             (contract) => contract.client === address
           );
-          console.log("Client contracts:", clientContracts);
+          // console.log("Client contracts:", clientContracts);
           
           setContracts(clientContracts);
           setLoading(false);
