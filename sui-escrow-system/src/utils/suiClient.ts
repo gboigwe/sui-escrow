@@ -29,17 +29,8 @@ export function createEscrowContractTx(tx: Transaction, {
     endDate: number, // timestamp in milliseconds
     paymentAmount: string | number, // in MIST (SUI * 10^9)
   }) {
-    // Debugging
-    
-    
-    
-    // tx.setGasBudget(gasBudget);
-  
     // Split the coin to get the exact amount
-    
     const serializedAmount = bcs.U64.serialize(paymentAmount.toString());
-    
-    
     const [coin] = tx.splitCoins(
       tx.gas, 
       [tx.pure(serializedAmount)]
@@ -225,16 +216,10 @@ export const getEscrowContract = async (escrowObjectId: string): Promise<EscrowC
       if (content && 'fields' in content) {
         const fields = content.fields as Record<string, any>;
         
-        
-        
-        
         // Parse amounts with explicit BigInt conversion
         const totalAmount = BigInt(fields.total_amount || '0');
         const remainingBalance = BigInt(fields.remaining_balance || '0'); // ← FIXED THIS LINE
 
-        
-        
-        
         const contractData: EscrowContract = {
           id: escrowObjectId,
           client: fields.client as string,
@@ -290,9 +275,7 @@ function parseMilestones(milestonesField: any) {
 export const getUserEscrowContracts = async (address: string): Promise<EscrowContract[]> => {
   try {
     const result: EscrowContract[] = [];
-    
-    
-    
+
     // Query for EscrowCreated events where user is client or freelancer
     const events = await suiClient.queryEvents({
       query: {
@@ -302,19 +285,14 @@ export const getUserEscrowContracts = async (address: string): Promise<EscrowCon
       order: 'descending'
     });
     
-    
-    
     // Filter events where user is client or freelancer
     for (const event of events.data) {
       if (event.parsedJson) {
         const eventData = event.parsedJson as any;
-        
-        
-        
+
         // Check if user is client or freelancer in this contract
         if (eventData.client === address || eventData.freelancer === address) {
           try {
-            
             
             // Fetch the full contract details using the escrow_id from event
             const contract = await getEscrowContract(eventData.escrow_id);
