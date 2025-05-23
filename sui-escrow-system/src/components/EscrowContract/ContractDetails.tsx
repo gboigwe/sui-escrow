@@ -117,6 +117,25 @@ const ContractDetails: React.FC = () => {
     refresh();
   };
 
+  // Add polling to keep data fresh
+  useEffect(() => {
+    if (!currentContract?.id) return;
+    
+    const pollInterval = setInterval(async () => {
+      try {
+        const updated = await loadContract(currentContract.id);
+        
+        if (updated && updated.milestones.length !== currentContract.milestones.length) {
+          // Data will update automatically through state
+        }
+      } catch (error) {
+        console.error("Polling error:", error);
+      }
+    }, 5000); // Poll every 5 seconds
+    
+    return () => clearInterval(pollInterval);
+  }, [currentContract?.id, loadContract]);
+
   // Fetch contract data on component mount and when ID changes
   useEffect(() => {
     if (isConnected && id) {
@@ -418,12 +437,13 @@ const ContractDetails: React.FC = () => {
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.3 }}
               >
-                <MilestoneForm 
-                  escrowId={currentContract.id} 
-                  totalAmount={currentContract.remainingBalance} 
-                  onMilestoneAdded={handleMilestoneAdded}
-                  onCancel={() => setMilestoneFormVisible(false)}
-                />
+              <MilestoneForm 
+                escrowId={currentContract.id} 
+                totalAmount={currentContract.totalAmount}
+                contractEndDate={currentContract.endDate} // Add this line
+                onMilestoneAdded={handleMilestoneAdded}
+                onCancel={() => setMilestoneFormVisible(false)}
+              />
               </motion.div>
             )}
           </AnimatePresence>

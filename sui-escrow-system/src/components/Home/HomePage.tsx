@@ -26,9 +26,9 @@ const HomePage: React.FC = () => {
   
   // Contract preview animation
   const [animateMilestones, setAnimateMilestones] = useState({
-    design: 0,
-    development: 0,
-    testing: 0
+    design: 100,
+    development: 85,
+    testing: 60
   });
   
   useEffect(() => {
@@ -39,7 +39,7 @@ const HomePage: React.FC = () => {
       }, 1000);
       
       const devTimer = setTimeout(() => {
-        setAnimateMilestones(prev => ({ ...prev, development: 50 }));
+        setAnimateMilestones(prev => ({ ...prev, development: 85 }));
       }, 2000);
       
       return () => {
@@ -248,7 +248,7 @@ const HomePage: React.FC = () => {
                           <div>
                             <div className="flex justify-between text-xs mb-1.5">
                               <span className="text-gray-600">Testing & Deployment</span>
-                              <span className="text-gray-600 font-medium">Pending</span>
+                              <span className="text-gray-600 font-medium">In Progress</span>
                             </div>
                             <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
                               <motion.div 
@@ -266,7 +266,7 @@ const HomePage: React.FC = () => {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className="w-2 h-2 bg-indigo-500 rounded-full"></span>
-                        <span className="text-xs text-gray-500">Last updated: 2h ago</span>
+                        <span className="text-xs text-gray-500">Has been updated</span>
                       </div>
                       <div className="text-xs text-gray-500 font-mono flex items-center">
                         <span className="w-2 h-2 bg-green-500 rounded-full mr-1.5"></span>

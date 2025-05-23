@@ -1,4 +1,3 @@
-// src/utils/contracts.ts
 export interface Milestone {
     description: string;
     amount: bigint;
@@ -134,17 +133,21 @@ export interface Milestone {
         return 'Unknown';
     }
   };
-  
-  // Format SUI amount from MIST (1 SUI = 10^9 MIST)
+
+  // Make sure this function in contracts.ts looks like this:
   export const formatSuiAmount = (amount: bigint): string => {
     // Convert to string and add decimal point at position length-9
     const amountStr = amount.toString();
+    
+    
     if (amountStr.length <= 9) {
       // Less than 1 SUI
-      return '0.' + amountStr.padStart(9, '0') + ' SUI';
+      const result = '0.' + amountStr.padStart(9, '0') + ' SUI';
+      return result;
     } else {
       const decimalPosition = amountStr.length - 9;
-      return amountStr.slice(0, decimalPosition) + '.' + amountStr.slice(decimalPosition) + ' SUI';
+      const result = amountStr.slice(0, decimalPosition) + '.' + amountStr.slice(decimalPosition) + ' SUI';
+      return result;
     }
   };
   

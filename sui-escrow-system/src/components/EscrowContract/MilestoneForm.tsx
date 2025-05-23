@@ -6,6 +6,7 @@ import { formatSuiAmount } from '../../utils/contracts';
 interface MilestoneFormProps {
   escrowId: string;
   totalAmount: bigint;
+  contractEndDate: number; // Added this line
   onMilestoneAdded: () => void;
   onCancel: () => void;
 }
@@ -13,9 +14,11 @@ interface MilestoneFormProps {
 const MilestoneForm: React.FC<MilestoneFormProps> = ({ 
   escrowId, 
   totalAmount, 
+  contractEndDate, // Added this line
   onMilestoneAdded,
   onCancel
 }) => {
+  
   const { addMilestone } = useEscrow();
   
   // Form state
@@ -34,43 +37,68 @@ const MilestoneForm: React.FC<MilestoneFormProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [transactionHash, setTransactionHash] = useState<string | null>(null);
   
+  // Validate individual field
+  const validateField = (field: keyof typeof errors) => {
+    let error = '';
+    
+    switch (field) {
+      case 'description':
+        if (!description.trim()) {
+          error = 'Description is required';
+        }
+        break;
+      
+      case 'amount':
+        if (!amount) {
+          error = 'Amount is required';
+        } else if (isNaN(Number(amount)) || Number(amount) <= 0) {
+          error = 'Amount must be a valid positive number';
+        } else if (BigInt(Math.floor(Number(amount) * 1_000_000_000)) > totalAmount) {
+          error = `Amount cannot exceed total contract value (${formatSuiAmount(totalAmount)})`;
+        }
+        break;
+      
+      case 'deadline':
+        if (!deadline) {
+          error = 'Deadline is required';
+        } else {
+          const deadlineDate = new Date(deadline);
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          
+          // Check if deadline is in the future
+          if (deadlineDate <= today) {
+            error = 'Deadline must be in the future';
+          }
+          
+          // NEW: Check if deadline is before contract end date
+          const contractEndDateObj = new Date(contractEndDate);
+          if (deadlineDate >= contractEndDateObj) {
+            error = `Milestone deadline must be before contract end date (${contractEndDateObj.toLocaleDateString()})`;
+          }
+        }
+        break;
+    }
+    
+    if (error) {
+      setErrors(prev => ({ ...prev, [field]: error }));
+      return false;
+    } else {
+      setErrors(prev => ({ ...prev, [field]: undefined }));
+      return true;
+    }
+  };
+  
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validate form
-    const newErrors: {
-      description?: string;
-      amount?: string;
-      deadline?: string;
-    } = {};
+    // Validate all fields
+    const isDescriptionValid = validateField('description');
+    const isAmountValid = validateField('amount');
+    const isDeadlineValid = validateField('deadline');
     
-    if (!description.trim()) {
-      newErrors.description = 'Description is required';
-    }
-    
-    if (!amount) {
-      newErrors.amount = 'Amount is required';
-    } else if (isNaN(Number(amount)) || Number(amount) <= 0) {
-      newErrors.amount = 'Amount must be a valid positive number';
-    } else if (BigInt(Math.floor(Number(amount) * 1_000_000_000)) > totalAmount) {
-      newErrors.amount = `Amount cannot exceed total contract value (${formatSuiAmount(totalAmount)})`;
-    }
-    
-    if (!deadline) {
-      newErrors.deadline = 'Deadline is required';
-    } else {
-      const deadlineDate = new Date(deadline);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      if (deadlineDate <= today) {
-        newErrors.deadline = 'Deadline must be in the future';
-      }
-    }
-    
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
+    if (!isDescriptionValid || !isAmountValid || !isDeadlineValid) {
       return;
     }
     
@@ -116,6 +144,9 @@ const MilestoneForm: React.FC<MilestoneFormProps> = ({
       setIsSubmitting(false);
     }
   };
+
+  // Calculate max date for deadline input (contract end date minus 1 day)
+  const maxDeadlineDate = new Date(contractEndDate - 86400000).toISOString().split('T')[0];
 
   return (
     <motion.div
@@ -170,6 +201,21 @@ const MilestoneForm: React.FC<MilestoneFormProps> = ({
           </div>
         ) : (
           <div className="space-y-6">
+            {/* Contract deadline info */}
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <div className="flex items-start">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-yellow-600 mt-0.5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+                <div>
+                  <p className="text-sm text-yellow-800">
+                    <strong>Important:</strong> Milestone deadline must be before the contract end date: {' '}
+                    <strong>{new Date(contractEndDate).toLocaleDateString()}</strong>
+                  </p>
+                </div>
+              </div>
+            </div>
+
             <div>
               <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
                 Milestone Description
@@ -184,6 +230,7 @@ const MilestoneForm: React.FC<MilestoneFormProps> = ({
                     setErrors({ ...errors, description: undefined });
                   }
                 }}
+                onBlur={() => validateField('description')}
                 rows={3}
                 placeholder="Describe what needs to be completed for this milestone..."
                 disabled={isSubmitting}
@@ -210,6 +257,7 @@ const MilestoneForm: React.FC<MilestoneFormProps> = ({
                         setErrors({ ...errors, amount: undefined });
                       }
                     }}
+                    onBlur={() => validateField('amount')}
                     placeholder="0.0"
                     disabled={isSubmitting}
                   />
@@ -242,7 +290,9 @@ const MilestoneForm: React.FC<MilestoneFormProps> = ({
                         setErrors({ ...errors, deadline: undefined });
                       }
                     }}
+                    onBlur={() => validateField('deadline')}
                     min={new Date().toISOString().split('T')[0]}
+                    max={maxDeadlineDate}
                     disabled={isSubmitting}
                   />
                   <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
@@ -254,6 +304,9 @@ const MilestoneForm: React.FC<MilestoneFormProps> = ({
                 {errors.deadline && (
                   <p className="mt-1 text-sm text-red-600">{errors.deadline}</p>
                 )}
+                <p className="mt-1 text-xs text-gray-500">
+                  Must be before: {new Date(contractEndDate).toLocaleDateString()}
+                </p>
               </div>
             </div>
           </div>
