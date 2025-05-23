@@ -30,15 +30,15 @@ export function createEscrowContractTx(tx: Transaction, {
     paymentAmount: string | number, // in MIST (SUI * 10^9)
   }) {
     // Debugging
-    console.log("Creating escrow contract with payment amount:", paymentAmount);
-    console.log("Payment amount type:", typeof paymentAmount);
+    
+    
     
     // tx.setGasBudget(gasBudget);
   
     // Split the coin to get the exact amount
-    console.log("Serializing amount:", paymentAmount.toString());
+    
     const serializedAmount = bcs.U64.serialize(paymentAmount.toString());
-    console.log("Serialized amount:", serializedAmount);
+    
     
     const [coin] = tx.splitCoins(
       tx.gas, 
@@ -207,7 +207,7 @@ export function cancelContractTx(tx: Transaction, {
 
 export const getEscrowContract = async (escrowObjectId: string): Promise<EscrowContract> => {
   try {
-    console.log('🔍 Fetching contract:', escrowObjectId);
+    
     
     const escrowObject = await suiClient.getObject({
       id: escrowObjectId,
@@ -216,24 +216,24 @@ export const getEscrowContract = async (escrowObjectId: string): Promise<EscrowC
       }
     });
     
-    console.log('📦 Raw escrow object data:', escrowObject.data);
+    
     
     if (escrowObject.data?.content) {
       const content = escrowObject.data.content;
-      console.log('📄 Object content:', content);
+      
       
       if (content && 'fields' in content) {
         const fields = content.fields as Record<string, any>;
-        console.log('🔧 Raw fields:', fields);
-        console.log('💰 total_amount:', fields.total_amount, typeof fields.total_amount);
-        console.log('💳 remaining_balance:', fields.remaining_balance);
+        
+        
+        
         
         // Parse amounts with explicit BigInt conversion
         const totalAmount = BigInt(fields.total_amount || '0');
         const remainingBalance = BigInt(fields.remaining_balance || '0'); // ← FIXED THIS LINE
 
-        console.log('💰 Parsed totalAmount:', totalAmount.toString());
-        console.log('💳 Parsed remainingBalance:', remainingBalance.toString());
+        
+        
         
         const contractData: EscrowContract = {
           id: escrowObjectId,
@@ -248,11 +248,7 @@ export const getEscrowContract = async (escrowObjectId: string): Promise<EscrowC
           description: fields.description as string || '',
         };
         
-        console.log('✅ Final contract data with proper types:', {
-          ...contractData,
-          totalAmount: contractData.totalAmount.toString(),
-          remainingBalance: contractData.remainingBalance.toString(),
-        });
+        
         
         return contractData;
       }
@@ -295,7 +291,7 @@ export const getUserEscrowContracts = async (address: string): Promise<EscrowCon
   try {
     const result: EscrowContract[] = [];
     
-    console.log('Querying escrow contracts for address:', address);
+    
     
     // Query for EscrowCreated events where user is client or freelancer
     const events = await suiClient.queryEvents({
@@ -306,19 +302,19 @@ export const getUserEscrowContracts = async (address: string): Promise<EscrowCon
       order: 'descending'
     });
     
-    console.log('Found escrow creation events:', events.data.length);
+    
     
     // Filter events where user is client or freelancer
     for (const event of events.data) {
       if (event.parsedJson) {
         const eventData = event.parsedJson as any;
         
-        console.log('Processing event data:', eventData);
+        
         
         // Check if user is client or freelancer in this contract
         if (eventData.client === address || eventData.freelancer === address) {
           try {
-            console.log(`Fetching contract details for escrow_id: ${eventData.escrow_id}`);
+            
             
             // Fetch the full contract details using the escrow_id from event
             const contract = await getEscrowContract(eventData.escrow_id);
@@ -326,13 +322,6 @@ export const getUserEscrowContracts = async (address: string): Promise<EscrowCon
             // Validate that the contract data is complete
             if (contract && contract.id && contract.client && contract.freelancer) {
               result.push(contract);
-              console.log(`✅ Successfully added contract:`, {
-                id: contract.id,
-                totalAmount: contract.totalAmount.toString(),
-                remainingBalance: contract.remainingBalance.toString()
-              });
-            } else {
-              console.warn(`❌ Invalid contract data for ${eventData.escrow_id}:`, contract);
             }
           } catch (error) {
             console.error(`❌ Error fetching contract ${eventData.escrow_id}:`, error);
@@ -341,7 +330,7 @@ export const getUserEscrowContracts = async (address: string): Promise<EscrowCon
       }
     }
     
-    console.log(`✅ Total user contracts found: ${result.length}`);
+    
     return result.sort((a, b) => b.createdAt - a.createdAt);
     
   } catch (error) {
