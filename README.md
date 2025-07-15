@@ -97,27 +97,16 @@ SuiEscrow leverages Sui's unique object-centric model and ownership system:
 - **Events**: Contract interactions emit events for frontend reactivity
 - **Access Controls**: Role-based permissions enforce proper authorization
 
-## ⚠️ IMPORTANT NOTICE ⚠️
-
-This project is currently participating in the **Sui Overflow 2025 Hackathon**. 
-
-Until the conclusion of the hackathon:
-- This code is **NOT OPEN SOURCE**
-- **NO CONTRIBUTIONS** are being accepted
-- **NO FORKS** or derivative works are permitted
-- This code may not be used in any other hackathon or competitive submission
-
 Please see the [LICENSE.md](./LICENSE.md) file for detailed terms and restrictions.
 
 The project will be released under a standard open source license after the hackathon concludes.
 
 ## 🏆 Acknowledgements
 
-- Created for the Sui Overflow 2025 Hackathon
 - Built with [Sui Move](https://docs.sui.io/build/move)
 - Frontend developed using React, TypeScript, and TailwindCSS
 - Wallet integration with [@mysten/wallet-kit](https://sdk.mystenlabs.com/wallet-kit)
 
 ---
 
-*Note: This project is a prototype developed for demonstration purposes in the Sui Overflow 2025 Hackathon.*
+*Note: This project is a prototype developed for demonstration purposes.*
